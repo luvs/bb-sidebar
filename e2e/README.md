@@ -25,7 +25,7 @@ and failure screenshots/traces. `e2e:cli` seeds three idle threads and runs each
 `bb sidebar` subcommand through the scratch CLI, checking the result with
 `bb sidebar list --json` and the plugin RPC; its command transcript is saved to
 `e2e-artifacts/cli-transcript.log`. All three commands use `scripts/e2e/server.mjs` and
-bb-app 0.47.0. Neither runs as part of `npm run check`. Run e2e separately from
+bb-app 0.49.0. Neither runs as part of `npm run check`. Run e2e separately from
 Vitest; the scratch server and Chromium compete with the unit suite for CPU.
 Before releases on macOS: `npm run e2e`; CI: `gh workflow run "Browser e2e"`.
 
@@ -139,8 +139,8 @@ terminal, and lifecycle state. It does not exercise closing a real terminal.
 
 Three populated captures cover light, dark, and a 280 px wide plugin sidebar.
 A fourth capture shows empty Active after all threads have been settled.
-The wide captures are 320 px. The host's persisted width includes a 49 px
-navigation rail/border on bb 0.47, so the browser fixture adds that amount and
+The wide captures are 320 px. The host's persisted width includes a 60 px
+navigation rail/border on bb 0.49, so the browser fixture adds that amount and
 asserts the actual plugin width. Update the offset in `open()` when a host
 release changes it. The populated images contain Pinned, Active, Snoozed, and Settled.
 Titles, project name, branch, order, locale, and timezone are fixed. A capture

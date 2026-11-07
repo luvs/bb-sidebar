@@ -55,7 +55,7 @@ export function AttentionChips({ controls, counts }: { controls: ThreadFilterCon
                 if (!empty) toggleState(state);
               }}
               className={cn(
-                "flex h-6 items-center gap-1 rounded-full border px-2 text-2xs font-medium tabular-nums outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                "flex h-6 items-center gap-1 rounded-full border px-2 text-2xs font-medium outline-none focus-visible:ring-1 focus-visible:ring-ring",
                 active ? "border-ring/60 bg-sidebar-accent text-foreground" : "border-border text-foreground/80",
                 empty ? "cursor-default text-muted-foreground" : "hover:bg-sidebar-accent",
               )}
