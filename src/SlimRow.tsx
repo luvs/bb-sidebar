@@ -2,7 +2,6 @@ import { memo, useId, useState } from "react";
 import { useSidebarThreadShortcut, type PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import { Icon } from "./components/Icon";
 import { Tooltip } from "./components/Tooltip";
-import { cn } from "./lib/utils";
 import { ChildThreadBadge, ChildThreadList, collapsedChildThreads } from "./ChildThreadList";
 import { CompactRow } from "./CompactRow";
 import { RowContextMenu } from "./RowContextMenu";
@@ -99,6 +98,11 @@ export const SlimRow = memo(function SlimRow({
           onOpen={onNavigate}
           trailing={
             <>
+              {/* Park, archive, and delete grow leftward into the title on hover, so
+              the child chip and the restore button never move under the pointer. */}
+              <span className="pointer-events-none relative flex w-0 shrink-0 items-center justify-end gap-0.5 overflow-hidden opacity-0 transition-opacity duration-150 ease-out focus-within:w-auto focus-within:overflow-visible focus-within:opacity-100 [@media(hover:hover)]:group-hover/slim:w-auto [@media(hover:hover)]:group-hover/slim:overflow-visible [@media(hover:hover)]:group-hover/slim:opacity-100 [@media(hover:none)]:w-auto [@media(hover:none)]:overflow-visible [@media(hover:none)]:opacity-100 motion-reduce:transition-none">
+                <RowQuickActionButtons thread={thread} />
+              </span>
               <OpenPortsIndicator thread={thread} />
               {childThreads.length > 0 ? (
                 // Positioned, so the chip sits above the row's full-bleed link.
@@ -120,15 +124,7 @@ export const SlimRow = memo(function SlimRow({
               ) : limit ? (
                 <StatusOrTime thread={thread} now={now} />
               ) : (
-                <span
-                  className={cn(
-                    "pointer-events-none relative flex min-w-5 shrink-0 items-center justify-end tabular-nums text-2xs text-muted-foreground/60 [@media(hover:none)]:gap-2",
-                    // Room for park (not on Parked), archive, delete, and restore.
-                    shelf === "parked"
-                      ? "has-[:focus-visible]:min-w-16 [@media(hover:hover)]:group-hover/slim:min-w-16"
-                      : "has-[:focus-visible]:min-w-[5.25rem] [@media(hover:hover)]:group-hover/slim:min-w-[5.25rem]",
-                  )}
-                >
+                <span className="pointer-events-none relative flex min-w-5 shrink-0 items-center justify-end tabular-nums text-2xs text-muted-foreground/60 [@media(hover:none)]:gap-2">
                   <span className="flex items-center transition-opacity duration-150 ease-out [@media(hover:hover)]:group-hover/slim:opacity-0 motion-reduce:transition-none">
                     {shelf === "parked" && parkedAt != null ? (
                       `Waiting ${Math.max(0, Math.floor((now - parkedAt) / 86_400_000))}d`
@@ -140,8 +136,7 @@ export const SlimRow = memo(function SlimRow({
                   </span>
                   {/* Pulled right by the restore button's padding, so its icon — not
                   the hit area — lands on the column. */}
-                  <span className="absolute -right-0.5 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity duration-150 ease-out has-[:focus-visible]:opacity-100 group-hover/slim:opacity-100 [@media(hover:none)]:static [@media(hover:none)]:translate-y-0 [@media(hover:none)]:opacity-100 motion-reduce:transition-none">
-                    <RowQuickActionButtons thread={thread} />
+                  <span className="absolute -right-0.5 top-1/2 flex -translate-y-1/2 items-center opacity-0 transition-opacity duration-150 ease-out has-[:focus-visible]:opacity-100 group-hover/slim:opacity-100 [@media(hover:none)]:static [@media(hover:none)]:translate-y-0 [@media(hover:none)]:opacity-100 motion-reduce:transition-none">
                     <Tooltip
                       label={
                         shelf === "parked"
