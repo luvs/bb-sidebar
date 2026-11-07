@@ -18,6 +18,8 @@ export const STORAGE_KEYS = {
   projectOrder: { key: "bb-sidebar:project-order:v1", evictionPriority: 88 },
   environmentCollapse: { key: "bb-sidebar:environment-collapse:v1", evictionPriority: 55 },
   environmentGrouping: { key: "bb-sidebar:environment-grouping:v1", evictionPriority: 71 },
+  // Whether the Archived shelf is shown, on this device.
+  showArchived: { key: "bb-sidebar:show-archived:v1", evictionPriority: 72 },
   // Shelf disclosure booleans.
   shelfExpansion: { key: "bb-sidebar:shelf-expansion:v1", evictionPriority: 60 },
   // Active shelf sort mode.

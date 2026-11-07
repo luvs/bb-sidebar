@@ -5,7 +5,7 @@ import { ProjectFavicon } from "./ProjectFavicon";
 import { projectIconUrl } from "./project-icons";
 import { usePinnedProjects } from "./usePinnedProjects";
 import { cn } from "./lib/utils";
-import { useState, type DragEvent } from "react";
+import { useState, type DragEvent, type ReactNode } from "react";
 
 function dropPlacement(event: DragEvent<HTMLButtonElement>) {
   const rect = event.currentTarget.getBoundingClientRect();
@@ -15,9 +15,15 @@ function dropPlacement(event: DragEvent<HTMLButtonElement>) {
 export function ProjectScopeControls({
   scope,
   status,
+  action,
+  children,
 }: {
   scope: readonly string[];
   status: ReturnType<typeof useSidebarThreads>["status"];
+  /** A button at the end of the picker's row. */
+  action?: ReactNode;
+  /** Drawn right under the scope picker, above the pinned project shortcuts. */
+  children?: ReactNode;
 }) {
   const { projects, projectIconRevision } = useInboxEnvironment();
   const { setScope } = useInboxActions();
@@ -34,14 +40,20 @@ export function ProjectScopeControls({
   });
   return (
     <div className="shrink-0 px-2 pb-1">
-      <ProjectScopeSelect
-        scope={scope}
-        projects={projects}
-        projectIconRevision={projectIconRevision}
-        onScopeChange={setScope}
-        pinnedProjects={pinnedProjects}
-        onToggleProjectPin={toggleProjectPin}
-      />
+      <div className="flex items-center gap-1">
+        <div className="min-w-0 flex-1">
+          <ProjectScopeSelect
+            scope={scope}
+            projects={projects}
+            projectIconRevision={projectIconRevision}
+            onScopeChange={setScope}
+            pinnedProjects={pinnedProjects}
+            onToggleProjectPin={toggleProjectPin}
+          />
+        </div>
+        {action}
+      </div>
+      {children}
       {shortcuts.length > 0 ? (
         <div role="group" aria-label="Pinned projects" className="flex flex-wrap gap-1 pt-1">
           {shortcuts.map((project) => {
