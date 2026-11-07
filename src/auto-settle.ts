@@ -1,4 +1,4 @@
-import { canPark, hasLiveWork, isTurnInFlight } from "./lifecycle";
+import { canPark, hasLiveWork, isTurnInFlight, legacyGoalCount } from "./lifecycle";
 
 export const MIN_AUTO_SETTLE_AFTER_DAYS = 1;
 export const MAX_AUTO_SETTLE_AFTER_DAYS = 90;
@@ -18,7 +18,8 @@ export interface AutoSettleThread {
   activity: {
     activeBackgroundAgentCount: number;
     activeBackgroundCommandCount: number;
-    activeGoalCount: number;
+    /** Reported only by bb 0.47 and 0.48; see `legacyGoalCount`. */
+    activeGoalCount?: number;
     activePlanModeCount: number;
     activeWorkflowCount: number;
   };
@@ -56,9 +57,9 @@ function isWorking(thread: AutoSettleThread): boolean {
       backgroundAgents: activity.activeBackgroundAgentCount,
       backgroundCommands: activity.activeBackgroundCommandCount,
       planMode: activity.activePlanModeCount,
-      goals: activity.activeGoalCount,
     },
     isTurnInFlight(thread.status),
+    legacyGoalCount(activity),
   );
 }
 

@@ -5,7 +5,7 @@ import type { createThreadPortActions } from "./thread-ports";
 import type { z } from "zod";
 import type { cleanupIssueSchema, cleanupPreviewSchema, cleanupResultSchema, ownedPortTargetSchema } from "./contract";
 import { randomUUID } from "node:crypto";
-import { canPark, hasLiveWork, isTurnInFlight } from "./lifecycle";
+import { canPark, hasLiveWork, isTurnInFlight, legacyGoalCount } from "./lifecycle";
 import { EMPTY_RECLAIM, planTerminalReclaim, type ReclaimSummary } from "./reclaim";
 import { runThreadTasks } from "./thread-tasks";
 
@@ -64,9 +64,9 @@ export function createServerSettleCleanup(
           backgroundAgents: activity.activeBackgroundAgentCount,
           backgroundCommands: activity.activeBackgroundCommandCount,
           planMode: activity.activePlanModeCount,
-          goals: activity.activeGoalCount,
         },
         isTurnInFlight(thread.status),
+        legacyGoalCount(activity),
       ),
     });
   };

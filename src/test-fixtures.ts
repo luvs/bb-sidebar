@@ -17,6 +17,7 @@ export const idleSidebarThreadFields = {
   archivedAt: null,
   href: "",
   isHidden: false,
+  parentNotifications: "auto",
 } satisfies Partial<PluginSidebarThread>;
 
 export function deferred<T>() {

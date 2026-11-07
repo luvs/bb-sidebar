@@ -6,6 +6,7 @@ import { relativeTimeLabel } from "./relative-time";
 import { shortStatusLabel, statusToneClass, StatusOrTime, threadShortStatus, useThreadWithDraft } from "./StatusSlot";
 import { useWorkingSinceContext } from "./useWorkingSince";
 import { useThreadLimit } from "./RateLimits";
+import type { HostIndicator } from "./lifecycle";
 
 /**
  * This plugin's status glyphs, matching bb's own sidebar shape for shape: the
@@ -33,7 +34,7 @@ export function StatusGlyph({
   const shared = cn("size-3.5 shrink-0", className);
   const aria = label ?? undefined;
 
-  switch (indicator) {
+  switch (indicator as HostIndicator) {
     case "unread-error":
       return <Icon name="CircleX" aria-label={aria} className={cn(shared, statusToneClass(indicator))} />;
     case "waiting-for-input":

@@ -1,4 +1,5 @@
 import type { PluginSidebarThread, PluginSidebarThreadIndicator } from "@get-bb/plugin-sdk/app";
+import type { HostIndicator } from "./lifecycle";
 
 /**
  * What a parent card says about its subtree when the list is collapsed.
@@ -21,7 +22,7 @@ interface ChildStatusSummary {
 }
 
 export function isWorkingIndicator(indicator: PluginSidebarThreadIndicator): boolean {
-  switch (indicator) {
+  switch (indicator as HostIndicator) {
     case "runtime":
     case "workflow":
     case "background-agent":

@@ -2,7 +2,7 @@ import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import type { ServerContext } from "./server-context";
 import type { SettledOverride } from "./auto-settle";
 import { LIFECYCLE_CHANNEL } from "./contract";
-import { canPark, hasLiveWork, isTurnInFlight, resolveShelf } from "./lifecycle";
+import { canPark, hasLiveWork, isTurnInFlight, legacyGoalCount, resolveShelf } from "./lifecycle";
 import { threadTreeIds } from "./thread-tree";
 
 /** One-time data repairs that need bb's thread tree, which SQL cannot see. */
@@ -267,9 +267,9 @@ export function createServerLifecycle(ctx: ServerContext) {
         backgroundAgents: thread.activity.activeBackgroundAgentCount,
         backgroundCommands: thread.activity.activeBackgroundCommandCount,
         planMode: thread.activity.activePlanModeCount,
-        goals: thread.activity.activeGoalCount,
       },
       isTurnInFlight(thread.status),
+      legacyGoalCount(thread.activity),
     ),
     isUnread: thread.lastReadAt === null || thread.latestAttentionAt > thread.lastReadAt,
     latestAttentionAt: thread.latestAttentionAt,

@@ -1,4 +1,22 @@
-import type { PluginSidebarThread, PluginSidebarThreadActivity } from "@get-bb/plugin-sdk";
+import type {
+  PluginSidebarThread,
+  PluginSidebarThreadActivity,
+  PluginSidebarThreadIndicator,
+} from "@get-bb/plugin-sdk";
+
+/**
+ * bb 0.49 (plugin SDK 0.6.132) dropped goals: the `goal` indicator and the
+ * goal activity counter. bb 0.47 and 0.48, which this plugin still supports,
+ * report both, and a running goal must keep blocking parking there.
+ */
+export type HostIndicator = PluginSidebarThreadIndicator | "goal";
+
+/** An older host's running goals, from either thread view; zero on bb 0.49 and later. */
+export function legacyGoalCount(activity: object): number {
+  const { goals, activeGoalCount } = activity as { goals?: unknown; activeGoalCount?: unknown };
+  const count = typeof goals === "number" ? goals : activeGoalCount;
+  return typeof count === "number" ? count : 0;
+}
 
 /**
  * The parked / settled / snoozed lifecycle, as pure functions over stored rows.
@@ -88,14 +106,18 @@ export function isTurnInFlight(status: PluginSidebarThread["status"]): boolean {
  * different bb views, so each passes its own turn signal, but the counters
  * that make a thread busy must never differ between them.
  */
-export function hasLiveWork(activity: PluginSidebarThreadActivity, turnInFlight: boolean): boolean {
+export function hasLiveWork(
+  activity: PluginSidebarThreadActivity,
+  turnInFlight: boolean,
+  goals = legacyGoalCount(activity),
+): boolean {
   return (
     turnInFlight ||
     activity.workflows > 0 ||
     activity.backgroundAgents > 0 ||
     activity.backgroundCommands > 0 ||
     activity.planMode > 0 ||
-    activity.goals > 0
+    goals > 0
   );
 }
 

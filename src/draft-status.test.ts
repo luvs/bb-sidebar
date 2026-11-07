@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { PluginSidebarThreadIndicator } from "@get-bb/plugin-sdk";
 import { withDraftIndicator } from "./StatusSlot";
 
 describe("withDraftIndicator", () => {
@@ -15,9 +16,10 @@ describe("withDraftIndicator", () => {
       "background-agent",
       "background-command",
       "plan-mode",
+      // bb 0.47 and 0.48 still send it; see `HostIndicator`.
       "goal",
     ] as const) {
-      expect(withDraftIndicator(busy, true)).toBe("working-draft");
+      expect(withDraftIndicator(busy as PluginSidebarThreadIndicator, true)).toBe("working-draft");
     }
   });
 

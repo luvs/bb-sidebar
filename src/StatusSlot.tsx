@@ -8,6 +8,7 @@ import {
 import { ThreadStatusGlyph } from "./bb-sdk";
 import { useMemo } from "react";
 import { isWorkingIndicator } from "./child-status";
+import type { HostIndicator } from "./lifecycle";
 import { cn } from "./lib/utils";
 import { relativeTimeLabel } from "./relative-time";
 import { useWorkingSinceContext } from "./useWorkingSince";
@@ -154,7 +155,7 @@ interface ShortStatus {
 
 function shortStatus(indicator: PluginSidebarThreadIndicator, indicatorLabel: string | null): ShortStatus | null {
   const className = statusToneClass(indicator);
-  switch (indicator) {
+  switch (indicator as HostIndicator) {
     case "unread-error":
       return { label: "Failed", className, showsDuration: false };
     case "waiting-for-input":
@@ -242,7 +243,7 @@ function isMonitoringLabel(label: string | null): boolean {
 
 /** Status palette shared by cards, child labels, and glyphs. */
 export function statusToneClass(indicator: PluginSidebarThreadIndicator): string {
-  switch (indicator) {
+  switch (indicator as HostIndicator) {
     case "unread-error":
       return "text-[color:var(--bb-sidebar-tone-error)]";
     case "waiting-for-input":
