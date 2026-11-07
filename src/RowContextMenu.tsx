@@ -1,5 +1,5 @@
 import { useThreadActions, useSidebarThreads } from "./bb-sdk";
-import { useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useRef, useState, type ReactNode } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { useBbNavigate, useRpc, type PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import { toast } from "./lib/toast";
@@ -12,12 +12,8 @@ import { Icon, type IconName } from "./components/Icon";
 import { cn } from "./lib/utils";
 import { usePortalScopeProps } from "./lib/portal-scope";
 import { ProjectActions } from "./ProjectContextMenu";
-import {
-  canParkThread,
-  formatSnoozeWakeTime,
-  resolveConfiguredSnoozePreset,
-  type ConfiguredSnoozePreset,
-} from "./lifecycle";
+import { formatSnoozeWakeTime, resolveConfiguredSnoozePreset, type ConfiguredSnoozePreset } from "./lifecycle";
+import { useArchiveThread } from "./useArchiveThread";
 import { beginTitleGeneration, finishTitleGeneration, useTitleGenerating } from "./title-generation-state";
 
 type RowContextMenuProps = {
@@ -35,18 +31,30 @@ type RowContextMenuProps = {
   onRename?: () => void;
 };
 
+/** The row menu's Park and Archive, offered again by the row's hover card. */
+type RowQuickActions = { onPark?: () => void; canArchive: boolean };
+
+const RowQuickActionsContext = createContext<RowQuickActions | null>(null);
+
+/** Null outside a row menu, so a hover card never offers what its menu would not. */
+export function useRowQuickActions() {
+  return useContext(RowQuickActionsContext);
+}
+
 /** Keep the plugin's menus, but build their actions and dialogs only on first open. */
 export function RowContextMenu({ children, ...props }: RowContextMenuProps) {
   const [activated, setActivated] = useState(false);
   return (
-    <ContextMenu.Root
-      onOpenChange={(open) => {
-        if (open) setActivated(true);
-      }}
-    >
-      <ContextMenu.Trigger asChild>{children}</ContextMenu.Trigger>
-      {activated ? <RowMenuContents {...props} /> : null}
-    </ContextMenu.Root>
+    <RowQuickActionsContext.Provider value={{ onPark: props.onPark, canArchive: props.canArchive ?? true }}>
+      <ContextMenu.Root
+        onOpenChange={(open) => {
+          if (open) setActivated(true);
+        }}
+      >
+        <ContextMenu.Trigger asChild>{children}</ContextMenu.Trigger>
+        {activated ? <RowMenuContents {...props} /> : null}
+      </ContextMenu.Root>
+    </RowQuickActionsContext.Provider>
   );
 }
 
@@ -64,7 +72,7 @@ function RowMenuContents({
   onRename,
 }: Omit<RowContextMenuProps, "children">) {
   const actions = useThreadActions(thread, {
-    keys: ["bb--core/split", "bb--core/pin", "bb--core/read", "bb--core/rename", "bb--core/archive"],
+    keys: ["bb--core/split", "bb--core/pin", "bb--core/read", "bb--core/rename"],
     requestRename: () => onRename?.(),
   });
   const navigate = useBbNavigate();
@@ -75,7 +83,7 @@ function RowMenuContents({
     if (!entry && key === "split") return navigate.toThread(thread.id, { split: true });
     return entry?.action.run();
   };
-  const { projects, threads } = useSidebarThreads();
+  const { projects } = useSidebarThreads();
   const project = projects.find((project) => project.id === thread.projectId);
   const portalScope = usePortalScopeProps();
   const rpc = useRpc<typeof bbSidebarRpcContract>();
@@ -85,19 +93,7 @@ function RowMenuContents({
   const pendingNotificationSave = useRef<Promise<void> | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [pickingSnooze, setPickingSnooze] = useState(false);
-  // Archive takes the children with it, and bb leaves every idle one's agent
-  // session loaded. Release them alongside the archive. Working children are
-  // skipped, so this never interrupts a turn archive itself would not.
-  const archive = () => {
-    void run("archive");
-    const threadIds = [
-      thread.id,
-      ...threads.filter((child) => child.parentThreadId === thread.id && canParkThread(child)).map((child) => child.id),
-    ];
-    void rpc.call("releaseRuntimes", { threadIds }).catch(() => {
-      void 0; // A missed release costs memory, not correctness.
-    });
-  };
+  const archive = useArchiveThread(thread);
   const regenerate = async () => {
     if (!beginTitleGeneration(thread.id)) return;
     try {

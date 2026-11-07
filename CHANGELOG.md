@@ -7,6 +7,7 @@
 - **`bb sidebar`** lets agents manage threads from the bb CLI: `list`, `snooze`, `unsnooze`, `settle`, `park`, `resume`, `pin`, and `parent`. Each command acts on the calling thread unless `--thread` names another, follows the same rules as the sidebar's menus, and adds nothing to an agent's prompt until the agent looks the command up. `list` shows each thread's shelf and pages with `--limit` and `--offset` under any filter; `--json` returns `{ threads, total, offset, nextOffset }`.
 - **Provider-limit recovery.** A thread stopped by a usage limit keeps a warning in the sidebar with one click to send Continue 30 seconds after the limit resets. When the provider gives no reset time, you choose one. A scheduled Continue moves the thread to Snoozed until it is sent and can be cancelled from the row. Codex reset times are read from its limit message in the provider's timezone.
 - Pinned projects can be reordered by dragging, or with Alt+Left/Right, and keep their order after a reload.
+- **Park, Archive and Delete on hover.** Hovering an Active thread shows Park, Archive and Delete beside Snooze and Settle, or in place of its status on a compact card; Parked, Snoozed and Settled rows show them beside the restore button (no Park on a Parked row). Park and Archive appear whenever the row's context menu offers them, so not while a thread is working or waiting on you. Archive also releases idle children's agent sessions, and Delete asks for the same named confirmation, as their menu items do.
 
 ### Changed
 

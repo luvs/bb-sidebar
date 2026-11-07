@@ -40,7 +40,6 @@ describe("sidebar settings", () => {
     await screen.findByText("Live work");
     const settledShelf = await screen.findByRole("region", { name: "Settled" });
     await within(settledShelf).findByText("Settled work");
-    expect(within(settledShelf).queryByRole("button", { name: "Archive thread" })).toBeNull();
     expect(screen.queryByRole("region", { name: "Archived" })).toBeNull();
     expect(document.querySelector("[data-project-stripe]")).toBeNull();
     expect(rendered.rpcCalls.some((call) => call.method === "getProjectColors")).toBe(false);
@@ -48,12 +47,10 @@ describe("sidebar settings", () => {
     settings = { ...settings, projectColorsEnabled: true };
     await rendered.emitRealtime("sidebar-settings", {});
     expect(screen.queryByText("Old work")).toBeNull();
-    expect(within(settledShelf).queryByRole("button", { name: "Archive thread" })).toBeNull();
     await waitFor(() => expect(document.querySelector("[data-project-stripe]")).not.toBeNull());
     settings = { ...settings, projectColorsEnabled: false };
     await rendered.emitRealtime("sidebar-settings", {});
     await waitFor(() => expect(screen.queryByRole("region", { name: "Archived" })).toBeNull());
-    expect(within(settledShelf).queryByRole("button", { name: "Archive thread" })).toBeNull();
     expect(within(settledShelf).getByText("Settled work")).toBeDefined();
     expect(document.querySelector("[data-project-stripe]")).toBeNull();
   });

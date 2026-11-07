@@ -20,6 +20,7 @@ import { SnoozeSelect } from "./SnoozeSelect";
 import { cn } from "./lib/utils";
 import { rowKeyshortcuts } from "./lib/keyshortcuts";
 import { RowContextMenu } from "./RowContextMenu";
+import { CompactQuickActions, ParkButton, RowQuickActionButtons } from "./RowQuickActions";
 import { ProviderGlyph } from "./ProviderGlyph";
 import { STATUS_SLOT_CLASS, StatusOrTime } from "./StatusSlot";
 import { CompactStatusOrTime } from "./StatusGlyph";
@@ -317,7 +318,9 @@ export function ThreadCard({
                     <>
                       {unpinButton}
                       {isWoke ? <WokeMarker onDismiss={onAcknowledgeWake} /> : null}
-                      <CompactStatusOrTime thread={thread} now={now} />
+                      <CompactQuickActions thread={thread}>
+                        <CompactStatusOrTime thread={thread} now={now} />
+                      </CompactQuickActions>
                     </>
                   )}
                   <ProviderGlyph providerId={thread.providerId} provider={provider} />
@@ -427,10 +430,12 @@ export function ThreadCard({
                       (limit || !showParkActions) && "w-auto min-w-20",
                       limit && "[&_[data-limit-control]]:static [&_[role=status]]:absolute [&_[role=status]]:right-0",
                       !showProject && "w-auto min-w-0",
-                      !showProject &&
-                        showParkActions &&
-                        "[@media(hover:hover)]:group-hover/card:min-w-11 has-[:focus-visible]:min-w-11",
-                      !showProject && holdParkActions && "min-w-11",
+                      // Room for the hover actions: unpin, snooze, park, archive, delete, and settle.
+                      showParkActions &&
+                        (thread.isPinned
+                          ? "[@media(hover:hover)]:group-hover/card:min-w-[8.25rem] has-[:focus-visible]:min-w-[8.25rem]"
+                          : "[@media(hover:hover)]:group-hover/card:min-w-[6.75rem] has-[:focus-visible]:min-w-[6.75rem]"),
+                      holdParkActions && (thread.isPinned ? "min-w-[8.25rem]" : "min-w-[6.75rem]"),
                     )}
                   >
                     <span
@@ -463,6 +468,7 @@ export function ThreadCard({
                           onSnooze={onSnooze}
                           onPark={onPark}
                         />
+                        <RowQuickActionButtons thread={thread} />
                         <ParkButton label="Settle thread" settling={isSettling} onActivate={startSettle} />
                       </span>
                     ) : null}
@@ -525,41 +531,6 @@ export function ThreadCard({
         </div>
       </li>
     </RowContextMenu>
-  );
-}
-
-function ParkButton({ label, settling, onActivate }: { label: string; settling: boolean; onActivate: () => void }) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      data-settling={settling ? "" : undefined}
-      onClick={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onActivate();
-      }}
-      className={cn(
-        "bb-sidebar-settle relative flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground",
-        "transition-colors duration-200 ease-out hover:text-[color:var(--bb-sidebar-settle-active)]",
-        "focus-visible:text-[color:var(--bb-sidebar-settle-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50",
-        "motion-reduce:transition-none",
-        settling && "text-[color:var(--bb-sidebar-settle-active)]",
-      )}
-    >
-      {/* Move only the artwork so hovering an edge cannot move the hit area. */}
-      <span
-        aria-hidden="true"
-        className="bb-sidebar-settle-art pointer-events-none relative flex size-full items-center justify-center rounded-[inherit]"
-      >
-        <Icon name="Check" aria-hidden className="bb-sidebar-settle-check size-3.5" />
-        <span className="bb-sidebar-settle-stars">
-          {[0, 1, 2].map((star) => (
-            <span key={star} className="bb-sidebar-settle-star" />
-          ))}
-        </span>
-      </span>
-    </button>
   );
 }
 
