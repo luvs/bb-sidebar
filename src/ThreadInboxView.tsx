@@ -18,6 +18,10 @@ import type { ThreadReorderControls } from "./ThreadCard";
 import { useInboxActions } from "./InboxContext";
 import { SCROLL_FADE_CLASS } from "./useScrollFade";
 import type { useInboxProjectGroups } from "./useInboxProjectGroups";
+import { ArchiveToggle, AttentionChips } from "./ThreadFilterBar";
+import { ArchivedShelf } from "./ArchivedShelf";
+import type { ThreadFilterControls } from "./useThreadFilter";
+import type { AttentionCounts } from "./thread-filter";
 
 export interface ShelfExpansionState {
   active: boolean;
@@ -37,6 +41,10 @@ interface ShelfThreads {
 interface ThreadInboxViewProps {
   shelves: Record<"pinned" | "inbox" | "working" | "inactive" | "snoozed" | "parked" | "settled", ShelfThreads>;
   scope: readonly string[];
+  filterBar: ThreadFilterControls & {
+    archived: readonly PluginSidebarThread[];
+    attentionCounts: AttentionCounts;
+  };
   reorderAnnouncement: string;
   attachScrollFadeRef: (node: HTMLDivElement | null) => void;
   status: ReturnType<typeof useSidebarThreads>["status"];
@@ -68,6 +76,7 @@ interface ThreadInboxViewProps {
 export function ThreadInboxView({
   shelves,
   scope,
+  filterBar,
   reorderAnnouncement,
   attachScrollFadeRef,
   status,
@@ -86,10 +95,17 @@ export function ThreadInboxView({
 }: ThreadInboxViewProps) {
   const { setExpandedShelves, setActiveSortMode, setSettledLimit } = useInboxActions();
   const { pinned, inbox, working, inactive, snoozed, parked, settled } = shelves;
+  const { archived, attentionCounts, ...filterControls } = filterBar;
+  const noMatches =
+    filterControls.filtering &&
+    archived.length === 0 &&
+    Object.values(shelves).every((shelf) => shelf.threads.length === 0);
   return (
     <div data-bb-sidebar-root="" className="flex min-h-0 flex-1 flex-col">
       {/* Project scope is plugin-owned; New thread lives in bb's chrome. */}
-      <ProjectScopeControls scope={scope} status={status} />
+      <ProjectScopeControls scope={scope} status={status} action={<ArchiveToggle controls={filterControls} />}>
+        <AttentionChips controls={filterControls} counts={attentionCounts} />
+      </ProjectScopeControls>
 
       <p role="status" aria-live="polite" className="sr-only">
         {reorderAnnouncement}
@@ -105,6 +121,10 @@ export function ThreadInboxView({
         ) : status === "error" ? (
           <p role="status" className="px-2 py-6 text-center text-xs text-muted-foreground">
             Could not load threads.
+          </p>
+        ) : noMatches ? (
+          <p role="status" className="px-2 py-6 text-center text-xs text-muted-foreground">
+            No threads in the chosen states.
           </p>
         ) : (
           <DockableShelves
@@ -170,13 +190,15 @@ export function ThreadInboxView({
                     ) : null}
                   </CollapsibleShelf>
                 ) : null}
-                {pinned.threads.length === 0 &&
+                {!filterControls.filtering &&
+                pinned.threads.length === 0 &&
                 inbox.threads.length === 0 &&
                 working.threads.length === 0 &&
                 inactive.threads.length === 0 ? (
                   <ActiveEmptyState />
                 ) : null}
-                {pinned.threads.length === 0 &&
+                {!filterControls.filtering &&
+                pinned.threads.length === 0 &&
                 inbox.threads.length === 0 &&
                 working.threads.length > 0 &&
                 inactive.threads.length === 0 ? (
@@ -275,6 +297,13 @@ export function ThreadInboxView({
                   settledLimit={settledLimit}
                   onLoadMore={() => setSettledLimit((limit) => limit + SETTLED_PAGE_SIZE)}
                 />
+                {filterControls.showArchived ? (
+                  <ArchivedShelf
+                    threads={archived}
+                    page={filterControls.archivedPage}
+                    forceExpanded={filterControls.filtering}
+                  />
+                ) : null}
               </>
             }
           />

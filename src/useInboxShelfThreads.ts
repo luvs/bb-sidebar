@@ -14,10 +14,13 @@ import { isInactiveThread } from "./inactive";
 import { isWorkingTree } from "./working-tree";
 import { threadNeedsAttention } from "./useRenamingShelfLocks";
 import { threadsWithAskingDescendants } from "./child-status";
+import { attentionCounts, threadMatchesStates, type AttentionState } from "./thread-filter";
 
 interface InboxShelfThreadsOptions {
   activeThreadId: string | null;
+  archived: readonly PluginSidebarThread[];
   childrenByParentId: ReadonlyMap<string, readonly PluginSidebarThread[]>;
+  states: ReadonlySet<AttentionState>;
   inactiveAfterHours: number | null;
   lifecycle: LifecycleApi;
   now: number;
@@ -29,18 +32,24 @@ interface InboxShelfThreadsOptions {
 
 export function useInboxShelfThreads({
   activeThreadId,
+  archived,
   childrenByParentId,
   inactiveAfterHours,
   lifecycle,
   now,
   renamingShelfLocks,
   scope,
+  states,
   threads,
   workingShelfEnabled,
 }: InboxShelfThreadsOptions) {
   return useMemo(() => {
     const allVisible = visibleInboxThreads(threads);
-    const scoped = filterByProjects(allVisible, scope);
+    const inScope = filterByProjects(allVisible, scope);
+    // The attention chips narrow every shelf. A matching child whose parent
+    // does not match stands on its own, like any orphan.
+    const matches = (thread: PluginSidebarThread) => threadMatchesStates(thread, states);
+    const scoped = states.size > 0 ? inScope.filter(matches) : inScope;
     // Children live in their parent's header chip instead of the flat list;
     // an orphan whose parent is not on screen stays here.
     const visible = hideChildrenOfVisibleParents(scoped);
@@ -111,15 +120,19 @@ export function useInboxShelfThreads({
         (left, right) => (lifecycle.wakeAtFor(left) ?? 0) - (lifecycle.wakeAtFor(right) ?? 0),
       ),
       settled: sortSettledThreads(onSettledShelf, lifecycle.settledAtFor),
+      archived: hideChildrenOfVisibleParents(filterByProjects(archived, scope).filter(matches)),
+      attentionCounts: attentionCounts(inScope),
     };
   }, [
     activeThreadId,
+    archived,
     childrenByParentId,
     inactiveAfterHours,
     lifecycle,
     now,
     renamingShelfLocks,
     scope,
+    states,
     threads,
     workingShelfEnabled,
   ]);

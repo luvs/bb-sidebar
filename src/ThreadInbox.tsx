@@ -1,4 +1,4 @@
-import { useSidebarThreads, useProviders } from "./bb-sdk";
+import { useProviders } from "./bb-sdk";
 import { STORAGE_KEYS } from "./lib/storage-keys";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useBbNavigate, type PluginSidebarThread, type PluginThreadListProps } from "@get-bb/plugin-sdk/app";
@@ -42,7 +42,8 @@ import { parseInactiveAfterHours } from "./inactive";
 import { DEFAULT_SIDEBAR_SETTINGS } from "./sidebar-settings";
 import { useScrollFade } from "./useScrollFade";
 import { usePersistedPreference } from "./lib/use-persisted-preference";
-import { activeSortCodec, childExpansionCodec, shelfExpansionCodec } from "./lib/inbox-preference-codecs";
+import { activeSortCodec, childExpansionCodec } from "./lib/inbox-preference-codecs";
+import { useInboxThreads, useThreadFilter, type InboxThreads } from "./useThreadFilter";
 const SETTLED_INITIAL_LIMIT = 10;
 
 type ActiveShelfKind = "pinned" | "inbox";
@@ -51,12 +52,11 @@ type ActiveShelfKind = "pinned" | "inbox";
  * The sidebar's scrolling list. Manual order is durable; optional views sort
  * the same rows without changing their saved positions.
  *
- * The host owns New thread, and thread search lives in bb's quick palette, so
- * this list ignores the deprecated `searchQuery` prop. It adds the plugin's
- * project scope picker.
+ * The host owns New thread. The plugin's project scope and search bar narrow
+ * the list, so it ignores the deprecated `searchQuery` prop.
  */
 export function ThreadInbox(props: PluginThreadListProps) {
-  const snapshot = useSidebarThreads();
+  const snapshot = useInboxThreads();
   return (
     <RateLimitsProvider threads={snapshot.threads}>
       <ThreadInboxContent {...props} snapshot={snapshot} />
@@ -70,7 +70,7 @@ function ThreadInboxContent({
   isCompactViewport,
   snapshot,
 }: PluginThreadListProps & {
-  snapshot: ReturnType<typeof useSidebarThreads>;
+  snapshot: InboxThreads;
 }) {
   const { status, threads, projects } = snapshot;
   const workingSince = useWorkingSince(threads);
@@ -101,10 +101,7 @@ function ThreadInboxContent({
     STORAGE_KEYS.childExpansion.key,
     childExpansionCodec,
   );
-  const [expandedShelves, setExpandedShelves] = usePersistedPreference(
-    STORAGE_KEYS.shelfExpansion.key,
-    shelfExpansionCodec,
-  );
+  const { expandedShelves, setExpandedShelves, ...threadFilter } = useThreadFilter(snapshot);
   const [activeSortMode, setActiveSortMode] = usePersistedPreference(STORAGE_KEYS.activeSort.key, activeSortCodec);
   const [settledLimit, setSettledLimit] = useState(SETTLED_INITIAL_LIMIT);
   const [renamingShelfLocks, setRenamingShelfLocks] = useRenamingShelfLocks(threads, lifecycle);
@@ -140,14 +137,18 @@ function ThreadInboxContent({
     parked,
     snoozed,
     settled,
+    archived,
+    attentionCounts,
   } = useInboxShelfThreads({
     activeThreadId,
+    archived: snapshot.archived,
     childrenByParentId,
     inactiveAfterHours,
     lifecycle,
     now,
     renamingShelfLocks,
     scope,
+    states: threadFilter.states,
     threads,
     workingShelfEnabled,
   });
@@ -477,6 +478,7 @@ function ThreadInboxContent({
           settled: { threads: settled, visibleThreads: visibleSettled },
         }}
         scope={scope}
+        filterBar={{ ...threadFilter, archived, attentionCounts }}
         reorderAnnouncement={reorderAnnouncement}
         attachScrollFadeRef={attachScrollFadeRef}
         status={status}
