@@ -32,6 +32,7 @@ export { default as Search01Icon } from "@hugeicons/core-free-icons/Search01Icon
 export { default as StopCircleIcon } from "@hugeicons/core-free-icons/StopCircleIcon";
 export { default as Target02Icon } from "@hugeicons/core-free-icons/Target02Icon";
 export { default as Tick02Icon } from "@hugeicons/core-free-icons/Tick02Icon";
+export { default as TranslateIcon } from "@hugeicons/core-free-icons/TranslateIcon";
 export { default as UserAdd01Icon } from "@hugeicons/core-free-icons/UserAdd01Icon";
 export { default as WorkflowCircle03Icon } from "@hugeicons/core-free-icons/WorkflowCircle03Icon";
 export { default as Yoga02Icon } from "@hugeicons/core-free-icons/Yoga02Icon";

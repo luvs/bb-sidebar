@@ -58,3 +58,12 @@ it("says so when the archive is empty", () => {
   fireEvent.click(screen.getByRole("button", { name: "Show archived threads" }));
   expect(within(screen.getByRole("region", { name: "Archived" })).getByText("No archived threads.")).toBeDefined();
 });
+
+it("opens a new thread with the translate prompt typed in", () => {
+  const rendered = render(threads);
+  fireEvent.click(screen.getByRole("button", { name: "Translate in a new thread" }));
+  expect(rendered.navigateCalls).toContainEqual({
+    method: "toCompose",
+    options: { initialPrompt: "переведи\n\n", focusPrompt: true },
+  });
+});

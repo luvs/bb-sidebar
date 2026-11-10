@@ -20,6 +20,7 @@ import { SCROLL_FADE_CLASS } from "./useScrollFade";
 import type { useInboxProjectGroups } from "./useInboxProjectGroups";
 import { ArchiveToggle, AttentionChips } from "./ThreadFilterBar";
 import { ArchivedShelf } from "./ArchivedShelf";
+import { TranslateButton } from "./TranslateButton";
 import type { ThreadFilterControls } from "./useThreadFilter";
 import type { AttentionCounts } from "./thread-filter";
 
@@ -103,7 +104,16 @@ export function ThreadInboxView({
   return (
     <div data-bb-sidebar-root="" className="flex min-h-0 flex-1 flex-col">
       {/* Project scope is plugin-owned; New thread lives in bb's chrome. */}
-      <ProjectScopeControls scope={scope} status={status} action={<ArchiveToggle controls={filterControls} />}>
+      <ProjectScopeControls
+        scope={scope}
+        status={status}
+        action={
+          <>
+            <TranslateButton />
+            <ArchiveToggle controls={filterControls} />
+          </>
+        }
+      >
         <AttentionChips controls={filterControls} counts={attentionCounts} />
       </ProjectScopeControls>
 

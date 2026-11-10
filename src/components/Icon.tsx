@@ -33,6 +33,7 @@ import {
   StopCircleIcon,
   Target02Icon,
   Tick02Icon,
+  TranslateIcon,
   UserAdd01Icon,
   WorkflowCircle03Icon,
   Yoga02Icon,
@@ -74,6 +75,7 @@ const ICON_MAP = {
   StopCircle: StopCircleIcon,
   Target: Target02Icon,
   Terminal: ComputerTerminal01Icon,
+  Translate: TranslateIcon,
   UserRoundPlus: UserAdd01Icon,
   Workflow: WorkflowCircle03Icon,
 } as const satisfies Record<string, IconSvgElement>;
