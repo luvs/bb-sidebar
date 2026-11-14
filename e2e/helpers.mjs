@@ -89,13 +89,17 @@ export async function open(page, { theme = "light", width = 320, empty = false }
   await page.addInitScript(
     ({ theme, width }) => {
       localStorage.setItem("bb.theme", theme);
-      // What the host keeps for its navigation rail and border, measured on
-      // bb 0.49.0. The persisted width covers the host and the plugin
-      // together; the specs measure the plugin alone. bb reads this key only
-      // on the first load, so a wrong number cannot be corrected by reloading
-      // with a better one: when every width assertion is off by the same
-      // amount, measure the reserve and change it here.
-      localStorage.setItem("bb.sidebar.width", String(width + 49));
+      // What the host keeps for its navigation rail and border. The persisted
+      // width covers the host and the plugin together; the specs measure the
+      // plugin alone.
+      //
+      // This number is not reliable: on bb 0.49.0 the reserve has been seen
+      // as both 60 and 49 px on the same machine and the same versions,
+      // hours apart, and nothing here chooses between them. bb reads the key
+      // only on the first load, so a wrong value cannot be corrected by
+      // reloading with a better one. When every width assertion is off by the
+      // same amount, that is this: measure the reserve and change it here.
+      localStorage.setItem("bb.sidebar.width", String(width + 60));
     },
     { theme, width },
   );

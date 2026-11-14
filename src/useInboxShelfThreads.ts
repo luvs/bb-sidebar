@@ -80,7 +80,7 @@ export function useInboxShelfThreads({
         activeUnpinned.push(thread);
         continue;
       }
-      if (lockedShelf === "working" && workingShelfEnabled && !needsAttention && !lifecycle.wokeFor(thread)) {
+      if (lockedShelf === "working" && workingShelfEnabled && !lifecycle.wokeFor(thread)) {
         working.push(thread);
         continue;
       }
@@ -88,13 +88,17 @@ export function useInboxShelfThreads({
         inactive.push(thread);
         continue;
       }
-      // A thread with work running anywhere under it waits on the Working
-      // shelf, unless it just woke from a snooze: that is news for Active.
-      // A child's question is news too, however long the parent sat idle.
+      // The shelf sits above Active and answers one question: what is live.
+      // Work running anywhere under the thread counts, and so does anything
+      // waiting on the user — its own question or failure, or a descendant's,
+      // which `isWorkingTree` deliberately refuses because that rule also
+      // decides the compact row. A thread that just woke from a snooze is
+      // news for Active, unless it is one of the ones waiting on the user.
       if (
         workingShelfEnabled &&
-        !lifecycle.wokeFor(thread) &&
-        isWorkingTree(thread, childrenByParentId.get(thread.id) ?? [], childrenByParentId, isWorking)
+        (needsAttention ||
+          (!lifecycle.wokeFor(thread) &&
+            isWorkingTree(thread, childrenByParentId.get(thread.id) ?? [], childrenByParentId, isWorking)))
       ) {
         working.push(thread);
       } else if (!askingParentIds.has(thread.id) && isInactiveThread(thread, now, inactiveAfterHours)) {
@@ -110,6 +114,11 @@ export function useInboxShelfThreads({
       pinnedBase: split.pinned,
       inboxBase: sortByCreatedAtDescending(activeUnpinned),
       workingBase: sortByCreatedAtDescending(working),
+      // Active's "nothing needs you" line must not appear over a shelf that
+      // holds a question.
+      workingNeedsYou: working.some(
+        (candidate) => threadNeedsAttention(candidate) || askingParentIds.has(candidate.id),
+      ),
       inactiveBase: sortByCreatedAtDescending(inactive),
       // Keep a global order behind project-scoped and parked views. Child and
       // parked rows are included because they can become visible later; a

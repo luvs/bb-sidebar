@@ -83,7 +83,7 @@ export function SidebarLayoutSettings({
       <SettingRow
         title="Working shelf"
         experimental
-        description="Keep working threads in their own shelf. They return to Active when work finishes, fails, or needs you. Pinned threads stay pinned."
+        description="Keep working threads, and anything waiting on you, in a shelf above Active. A thread leaves for Active once its work has finished and nothing needs you. Pinned threads stay pinned."
         control={
           <Switch
             label="Working shelf"

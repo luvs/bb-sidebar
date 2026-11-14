@@ -41,6 +41,8 @@ interface ShelfThreads {
 
 interface ThreadInboxViewProps {
   shelves: Record<"pinned" | "inbox" | "working" | "inactive" | "snoozed" | "parked" | "settled", ShelfThreads>;
+  /** Whether the Working shelf holds a thread waiting on the user. */
+  workingNeedsYou: boolean;
   scope: readonly string[];
   filterBar: ThreadFilterControls & {
     archived: readonly PluginSidebarThread[];
@@ -80,6 +82,7 @@ interface ThreadInboxViewProps {
 
 export function ThreadInboxView({
   shelves,
+  workingNeedsYou,
   scope,
   filterBar,
   reorderAnnouncement,
@@ -165,6 +168,28 @@ export function ThreadInboxView({
                     </Shelf>
                   </CollapsibleShelf>
                 ) : null}
+                {working.threads.length > 0 ? (
+                  <CollapsibleShelf
+                    label="Working"
+                    icon="Working"
+                    count={working.threads.length}
+                    expanded={expandedShelves.working}
+                    onToggle={() =>
+                      setExpandedShelves((current) => ({
+                        ...current,
+                        working: !current.working,
+                      }))
+                    }
+                  >
+                    <Shelf label={null}>
+                      {/* One line: the shelf sits above Active and should cost
+                      it as little room as it can. */}
+                      {working.visibleThreads.map((thread) =>
+                        renderActiveThread(thread, "inbox", false, true, true, "working"),
+                      )}
+                    </Shelf>
+                  </CollapsibleShelf>
+                ) : null}
                 {inbox.threads.length > 0 ? (
                   <CollapsibleShelf
                     label="Active"
@@ -214,6 +239,7 @@ export function ThreadInboxView({
                   <ActiveEmptyState />
                 ) : null}
                 {!filterControls.filtering &&
+                !workingNeedsYou &&
                 pinned.threads.length === 0 &&
                 inbox.threads.length === 0 &&
                 working.threads.length > 0 &&
@@ -224,27 +250,6 @@ export function ThreadInboxView({
             }
             lower={
               <>
-                {working.threads.length > 0 ? (
-                  <CollapsibleShelf
-                    label="Working"
-                    icon="Working"
-                    count={working.threads.length}
-                    expanded={expandedShelves.working}
-                    onToggle={() =>
-                      setExpandedShelves((current) => ({
-                        ...current,
-                        working: !current.working,
-                      }))
-                    }
-                  >
-                    <Shelf label={null}>
-                      {/* One line, like every shelf after Active. */}
-                      {working.visibleThreads.map((thread) =>
-                        renderActiveThread(thread, "inbox", false, true, true, "working"),
-                      )}
-                    </Shelf>
-                  </CollapsibleShelf>
-                ) : null}
                 {inactive.threads.length > 0 ? (
                   <CollapsibleShelf
                     label="Inactive"

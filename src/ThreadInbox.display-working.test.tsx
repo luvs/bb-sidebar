@@ -230,3 +230,54 @@ describe("another plugin's running status blocks shelving from the sidebar", () 
     await waitFor(() => expect(park).toHaveBeenCalledWith({ threadId: "parent" }));
   });
 });
+
+describe("the shelf above Active", () => {
+  const asking = { indicator: "waiting-for-input", hasPendingInteraction: true } as const;
+  const failed = { indicator: "unread-error", status: "error" } as const;
+
+  it("keeps a thread that needs you on the Working shelf instead of sending it to Active", async () => {
+    renderInbox(
+      [
+        thread({ id: "asking", title: "Needs an answer", ...asking }),
+        thread({ id: "failed", title: "Fell over", ...failed }),
+        thread({ id: "busy", title: "Busy work", indicator: "runtime" }),
+        thread({ id: "quiet", title: "Quiet work" }),
+      ],
+      { settings: { workingShelf: true } },
+    );
+    await screen.findByRole("link", { name: "Quiet work" });
+    await waitFor(() => expect(titlesIn("Working").sort()).toEqual(["Busy work", "Fell over", "Needs an answer"]));
+    expect(titlesIn("Active")).toEqual(["Quiet work"]);
+  });
+
+  it("leaves a thread that needs you in Active while the shelf is off", async () => {
+    renderInbox([
+      thread({ id: "asking", title: "Needs an answer", ...asking }),
+      thread({ id: "quiet", title: "Quiet work" }),
+    ]);
+    await screen.findByRole("link", { name: "Quiet work" });
+    expect(screen.queryByRole("region", { name: "Working" })).toBeNull();
+    expect(titlesIn("Active").sort()).toEqual(["Needs an answer", "Quiet work"]);
+  });
+
+  it("draws the Working shelf above Active", async () => {
+    renderInbox(
+      [thread({ id: "busy", title: "Busy work", indicator: "runtime" }), thread({ id: "quiet", title: "Quiet work" })],
+      { settings: { workingShelf: true } },
+    );
+    await screen.findByRole("link", { name: "Quiet work" });
+    const working = await screen.findByRole("region", { name: "Working" });
+    const active = screen.getByRole("region", { name: "Active" });
+    // DOCUMENT_POSITION_FOLLOWING: Active comes after Working in the document.
+    expect(working.compareDocumentPosition(active) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("does not claim nothing needs you while the shelf holds a question", async () => {
+    renderInbox([thread({ id: "asking", title: "Needs an answer", ...asking })], {
+      settings: { workingShelf: true },
+    });
+    await screen.findByRole("link", { name: "Needs an answer" });
+    expect(titlesIn("Working")).toEqual(["Needs an answer"]);
+    expect(screen.queryByText(/Nothing needs you|Nobody needs you|Zero asks/)).toBeNull();
+  });
+});

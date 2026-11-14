@@ -404,9 +404,13 @@ describe("parking threads", () => {
         expect(screen.queryByRole("region", { name: "Working" })).toBeNull();
         return;
       }
-      await waitFor(() => expect(titlesIn("Working")).toEqual(["Busy work", "Waiting on child"]));
-      // Done, or needing you, is Active's business; pinned stays pinned.
-      expect(titlesIn("Active")).toEqual(["Asking parent", "Done work"]);
+      await waitFor(() =>
+        expect(titlesIn("Working").sort()).toEqual(["Asking parent", "Busy work", "Waiting on child"]),
+      );
+      // Finished work you have not read is Active's business; the shelf above
+      // it keeps what is running and what is waiting on you. Pinned stays
+      // pinned.
+      expect(titlesIn("Active")).toEqual(["Done work"]);
       expect(titlesIn("Pinned")).toEqual(["Pinned busy"]);
       // One line like the other shelves, even with compact mode off.
       for (const title of ["Busy work", "Waiting on child"]) {
@@ -414,6 +418,12 @@ describe("parking threads", () => {
         expect(row.classList.contains("h-8")).toBe(true);
         expect(within(row).getByRole("img", { name: "codex" }).querySelector(".rounded-full")).not.toBeNull();
       }
+      // A thread waiting on you keeps its full card on the shelf: the row only
+      // collapses while it is working, and the one thing that wants an answer
+      // should not be the quietest row on screen.
+      expect(
+        screen.getByRole("link", { name: "Asking parent" }).closest("[data-parent-card]")!.classList.contains("h-8"),
+      ).toBe(false);
     },
   );
 

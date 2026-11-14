@@ -141,6 +141,7 @@ function ThreadInboxContent({
     pinnedBase,
     inboxBase,
     workingBase,
+    workingNeedsYou,
     inactiveBase,
     allPinnedBase,
     allInboxBase,
@@ -458,6 +459,7 @@ function ThreadInboxContent({
           parked: { threads: parked, visibleThreads: visibleParked },
           settled: { threads: settled, visibleThreads: visibleSettled },
         }}
+        workingNeedsYou={workingNeedsYou}
         scope={scope}
         filterBar={{ ...threadFilter, archived, attentionCounts }}
         reorderAnnouncement={reorderAnnouncement}

@@ -15,7 +15,7 @@ await loadInboxApp();
 const projects = [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }];
 
 describe("a child waiting on the user", () => {
-  it("keeps its tree out of Working even while a sibling still works", async () => {
+  it("keeps its tree on the shelf above Active, beside a tree that still works", async () => {
     const now = Date.now();
     renderSlot(inbox, listProps, {
       sidebarThreads: {
@@ -50,12 +50,13 @@ describe("a child waiting on the user", () => {
 
     const working = await screen.findByRole("region", { name: "Working" });
     await waitFor(() => expect(within(working).getByText("Busy tree")).toBeDefined());
-    expect(within(working).queryByText("Asking tree")).toBeNull();
-    const active = screen.getByRole("region", { name: "Active" });
-    expect(within(active).getByText("Asking tree")).toBeDefined();
+    // A question under the tree keeps it on the shelf rather than sending it
+    // down to Active, which is where it used to go.
+    expect(within(working).getByText("Asking tree")).toBeDefined();
+    expect(screen.queryByRole("region", { name: "Active" })).toBeNull();
 
     // The middle row's capsule rolls up the question it holds.
-    const capsule = within(active).getByRole("button", { name: /^Show 1 grandchild thread for Worker, 1 need you$/ });
+    const capsule = within(working).getByRole("button", { name: /^Show 1 grandchild thread for Worker, 1 need you$/ });
     expect(capsule.getAttribute("data-child-status")).toBe("needs-you");
   });
 
