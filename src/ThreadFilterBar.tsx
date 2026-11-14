@@ -61,9 +61,11 @@ export function AttentionChips({ controls, counts }: { controls: ThreadFilterCon
               )}
             >
               {state === "running" ? (
-                // The row glyph spins; a count beside it should hold still.
+                // The row glyph's shape, without its pulse: a chip keeps its
+                // place whether or not anything is running, and a count that
+                // breathes at zero would read as work in flight.
                 <Icon
-                  name="Loading"
+                  name="Working"
                   aria-hidden
                   className={cn("size-3 shrink-0", statusToneClass("runtime"), empty && "opacity-60")}
                 />
