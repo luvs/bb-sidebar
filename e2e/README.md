@@ -140,10 +140,14 @@ terminal, and lifecycle state. It does not exercise closing a real terminal.
 
 Three populated captures cover light, dark, and a 280 px wide plugin sidebar.
 A fourth capture shows empty Active after all threads have been settled.
-The wide captures are 320 px. The host's persisted width includes a 60 px
-navigation rail/border on bb 0.49, so the browser fixture adds that amount and
-asserts the actual plugin width. Update the offset in `open()` when a host
-release changes it. The populated images contain Pinned, Active, Snoozed, and Settled.
+The wide captures are 320 px. The host's persisted width covers bb's chrome
+and the plugin together, so `open()` adds bb 0.49's 49 px navigation rail and
+border (`HOST_CHROME`) and then asserts the plugin's own width. It also hides
+every scrollbar outside the plugin from the first frame: bb scrolls the plugin
+inside a pane of its own, and that pane's scrollbar took another ~11 px
+whenever the content happened to be tall enough, which made the width depend
+on how much a fixture rendered and failed width assertions in some runs and
+not others. Update `HOST_CHROME` when a host release moves the rail. The populated images contain Pinned, Active, Snoozed, and Settled.
 Titles, project name, branch, order, locale, and timezone are fixed. A capture
 stylesheet hides relative update/wake labels while retaining layout, reduced
 motion disables animation, and the mouse moves off the sidebar.

@@ -85,23 +85,44 @@ export async function reset(request) {
   await rpc(request, "reorderInbox", { inboxThreadIds: fixture.threads.map(({ id }) => id) });
 }
 
+/**
+ * What bb keeps beside the plugin: a 48 px navigation rail and a 1 px border,
+ * measured on bb 0.49.0. The persisted width covers the host and the plugin
+ * together, and the specs measure the plugin alone. bb reads the key only on
+ * the first load, so a wrong number here cannot be corrected by reloading
+ * with a better one: every width assertion goes off by the same amount.
+ */
+const HOST_CHROME = 49;
+
+/**
+ * bb scrolls the plugin inside a pane of its own, and that pane's scrollbar
+ * takes ~11 px off the plugin whenever the content is tall enough to need it.
+ * It is not ours — it sits outside `[data-bb-sidebar-root]`, so it appears in
+ * no snapshot — but it made the plugin's width depend on how much the fixture
+ * happened to render, which is why the reserve above looked like it was
+ * sometimes 60 and width assertions failed in some runs and not others.
+ * `open` hides every scrollbar outside the plugin, from the first frame, and
+ * leaves ours alone.
+ */
+
 export async function open(page, { theme = "light", width = 320, empty = false } = {}) {
   await page.addInitScript(
-    ({ theme, width }) => {
+    ({ theme, persisted }) => {
       localStorage.setItem("bb.theme", theme);
-      // What the host keeps for its navigation rail and border. The persisted
-      // width covers the host and the plugin together; the specs measure the
-      // plugin alone.
-      //
-      // This number is not reliable: on bb 0.49.0 the reserve has been seen
-      // as both 60 and 49 px on the same machine and the same versions,
-      // hours apart, and nothing here chooses between them. bb reads the key
-      // only on the first load, so a wrong value cannot be corrected by
-      // reloading with a better one. When every width assertion is off by the
-      // same amount, that is this: measure the reserve and change it here.
-      localStorage.setItem("bb.sidebar.width", String(width + 60));
+      localStorage.setItem("bb.sidebar.width", String(persisted));
+      // Before the first frame, so nothing reflows later: a style applied
+      // after load moves the plugin 11 px and the list animates the change,
+      // which the motion specs then see.
+      const install = () => {
+        const style = document.createElement("style");
+        style.textContent =
+          "*{scrollbar-width:none}[data-bb-sidebar-root],[data-bb-sidebar-root] *{scrollbar-width:auto}";
+        document.head.append(style);
+      };
+      if (document.head) install();
+      else document.addEventListener("DOMContentLoaded", install, { once: true });
     },
-    { theme, width },
+    { theme, persisted: width + HOST_CHROME },
   );
   await page.goto(fixture.url);
   if (empty) {
@@ -109,4 +130,9 @@ export async function open(page, { theme = "light", width = 320, empty = false }
   } else {
     await expect(shelf(page, "Active")).toBeVisible();
   }
+  // The scrollbar is gone from the first frame, so this holds already; it is
+  // here to fail loudly, naming the width, if the host's reserve ever moves.
+  await expect
+    .poll(async () => Math.round((await page.locator("[data-bb-sidebar-root]").boundingBox()).width))
+    .toBe(width);
 }
