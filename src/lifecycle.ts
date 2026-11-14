@@ -1,22 +1,4 @@
-import type {
-  PluginSidebarThread,
-  PluginSidebarThreadActivity,
-  PluginSidebarThreadIndicator,
-} from "@get-bb/plugin-sdk";
-
-/**
- * bb 0.49 (plugin SDK 0.6.132) dropped goals: the `goal` indicator and the
- * goal activity counter. bb 0.47 and 0.48, which this plugin still supports,
- * report both, and a running goal must keep blocking parking there.
- */
-export type HostIndicator = PluginSidebarThreadIndicator | "goal";
-
-/** An older host's running goals, from either thread view; zero on bb 0.49 and later. */
-export function legacyGoalCount(activity: object): number {
-  const { goals, activeGoalCount } = activity as { goals?: unknown; activeGoalCount?: unknown };
-  const count = typeof goals === "number" ? goals : activeGoalCount;
-  return typeof count === "number" ? count : 0;
-}
+import type { PluginSidebarThread, PluginSidebarThreadActivity } from "@get-bb/plugin-sdk";
 
 /**
  * The parked / settled / snoozed lifecycle, as pure functions over stored rows.
@@ -45,7 +27,7 @@ export interface ThreadActivitySignals {
   hasPendingInteraction: boolean;
   /** A message waits to be sent, or one failed to send. */
   hasQueuedWork: boolean;
-  /** Any live work: runtime, workflows, background agents, plan, goals. */
+  /** Any live work: runtime, workflows, background agents, plan. */
   isWorking: boolean;
   isUnread: boolean;
   /** Newest attention timestamp bb reports for the thread. */
@@ -83,15 +65,24 @@ export function resolveWakeReason(
  * automatic settle share.
  *
  * bb has more kinds of live work than a single session status — workflows,
- * background agents, background commands, plan mode, goals — and every one of
- * them must block parking. Hiding a thread that is still working is the one
+ * background agents, background commands, plan mode — and every one of them
+ * must block parking. Hiding a thread that is still working is the one
  * failure this feature cannot afford. A queued message is work about to
  * start, and a failed one is something the user has not seen go nowhere yet.
  */
-export function canPark(
-  signals: Pick<ThreadActivitySignals, "hasPendingInteraction" | "hasQueuedWork" | "isWorking">,
-): boolean {
-  return !signals.hasPendingInteraction && !signals.hasQueuedWork && !signals.isWorking;
+export function canPark(signals: ParkSignals): boolean {
+  return parkBlocker(signals) === null;
+}
+
+type ParkSignals = Pick<ThreadActivitySignals, "hasPendingInteraction" | "hasQueuedWork" | "isWorking">;
+export type ParkBlocker = "working" | "question" | "queued";
+
+/** Why `canPark` refuses a thread, or null when it allows it. */
+export function parkBlocker(signals: ParkSignals): ParkBlocker | null {
+  if (signals.isWorking) return "working";
+  if (signals.hasPendingInteraction) return "question";
+  if (signals.hasQueuedWork) return "queued";
+  return null;
 }
 
 /** A turn bb has accepted and not yet finished, in either thread view. */
@@ -106,19 +97,35 @@ export function isTurnInFlight(status: PluginSidebarThread["status"]): boolean {
  * different bb views, so each passes its own turn signal, but the counters
  * that make a thread busy must never differ between them.
  */
-export function hasLiveWork(
-  activity: PluginSidebarThreadActivity,
-  turnInFlight: boolean,
-  goals = legacyGoalCount(activity),
-): boolean {
+export function hasLiveWork(activity: PluginSidebarThreadActivity, turnInFlight: boolean): boolean {
   return (
     turnInFlight ||
     activity.workflows > 0 ||
     activity.backgroundAgents > 0 ||
     activity.backgroundCommands > 0 ||
-    activity.planMode > 0 ||
-    goals > 0
+    activity.planMode > 0
   );
+}
+
+/** The activity counts on bb's project-thread row, which server code reads. */
+export interface ThreadRowActivity {
+  activeBackgroundAgentCount: number;
+  activeBackgroundCommandCount: number;
+  activePlanModeCount: number;
+  activeWorkflowCount: number;
+}
+
+/**
+ * A project-thread row's counts in the sidebar view's activity shape, so
+ * server code and the sidebar judge live work over the same fields.
+ */
+export function rowActivity(activity: ThreadRowActivity): PluginSidebarThreadActivity {
+  return {
+    workflows: activity.activeWorkflowCount,
+    backgroundAgents: activity.activeBackgroundAgentCount,
+    backgroundCommands: activity.activeBackgroundCommandCount,
+    planMode: activity.activePlanModeCount,
+  };
 }
 
 /** Any live work at all, which blocks parking and wakes a parked thread. */
@@ -177,6 +184,47 @@ export function resolveShelf(
   }
 
   return "active";
+}
+
+/**
+ * Whether a thread's queued message is the sidebar's own scheduled Continue,
+ * which its snooze is waiting for. That message does not count as queued
+ * work: the thread stays Snoozed until the Continue is sent. Any other queued
+ * work, or a Continue that failed, keeps the thread visible.
+ */
+export function waitsForScheduledContinue(
+  row: Pick<ThreadLifecycleRow, "snoozedUntil"> | undefined,
+  scheduled: { sendAt: number; failed: boolean } | null | undefined,
+  queuedWork: string,
+  now: number,
+): boolean {
+  return (
+    !!scheduled &&
+    scheduled.sendAt > now &&
+    !scheduled.failed &&
+    queuedWork !== "failed" &&
+    row?.snoozedUntil === scheduled.sendAt
+  );
+}
+
+/**
+ * The shelf a thread's own sidebar row sits on.
+ *
+ * A pinned thread stays in Active unless the user filed it away explicitly:
+ * that keeps a shelf change visible while bb's unpin update propagates, and
+ * the pin RPC clears these rows when pinning succeeds. A child shown inside
+ * its parent's row takes the parent's shelf instead (see `shelfRowIds`).
+ */
+export function resolveRowShelf(
+  row: ThreadLifecycleRow | undefined,
+  signals: ThreadActivitySignals,
+  now: number,
+  isPinned: boolean,
+): ThreadShelf {
+  if (isPinned && row?.settledOverride !== "settled" && row?.snoozedUntil == null && row?.parkedAt == null) {
+    return "active";
+  }
+  return resolveShelf(row, signals, now);
 }
 
 const MINUTE_MS = 60_000;

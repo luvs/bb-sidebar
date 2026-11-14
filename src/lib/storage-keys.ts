@@ -20,6 +20,8 @@ export const STORAGE_KEYS = {
   environmentGrouping: { key: "bb-sidebar:environment-grouping:v1", evictionPriority: 71 },
   // Whether the Archived shelf is shown, on this device.
   showArchived: { key: "bb-sidebar:show-archived:v1", evictionPriority: 72 },
+  // Whether a project with one Active thread still gets a header.
+  singleThreadProjectGrouping: { key: "bb-sidebar:single-thread-project-grouping:v1", evictionPriority: 73 },
   // Shelf disclosure booleans.
   shelfExpansion: { key: "bb-sidebar:shelf-expansion:v1", evictionPriority: 60 },
   // Active shelf sort mode.

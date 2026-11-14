@@ -1,4 +1,4 @@
-import { experimental_useRpcKeyedQuery, experimental_useThreadActions } from "@get-bb/plugin-sdk/app";
+import { experimental_useRpcKeyedQuery, experimental_useThreadActions, type useSdk } from "@get-bb/plugin-sdk/app";
 import type { ComponentType } from "react";
 import type {
   PluginAppSlots,
@@ -19,6 +19,9 @@ export {
   experimental_useSidebarThreadSplit as useSidebarThreadSplit,
   experimental_ThreadStatusGlyph as ThreadStatusGlyph,
   experimental_ShortcutHint as ShortcutHint,
+  // bb's own thread-status rule. bb 0.49.0, the minimum host (engines.bb),
+  // ships it, so it has no fallback.
+  experimental_resolveThreadStatus as resolveThreadStatus,
 } from "@get-bb/plugin-sdk/app";
 
 /** Props bb passes to a thread header action. */
@@ -39,7 +42,7 @@ interface RetiredHeaderSlot {
 /**
  * SDK 0.6.94 dropped this slot from its types, but bb 0.47 and 0.48 still
  * render it (`bb plugin build` warns). Header thread actions are plain buttons,
- * so the parent and children chips keep this slot until they are redesigned.
+ * so the parent chip keeps this slot until it is redesigned.
  */
 export function registerThreadHeaderAction(
   slots: PluginAppSlots,
@@ -51,6 +54,12 @@ export function registerThreadHeaderAction(
 export function useThreadActions(thread: PluginSidebarThread, options?: PluginThreadActionsOptions) {
   const environment = thread.environment?.id ? { id: thread.environment.id, path: thread.environment.path } : null;
   return experimental_useThreadActions({ ...thread, environment }, options);
+}
+
+/** How many other threads bb deletes with this one, archived ones and lifecycle dependents included. */
+export async function countDeleteCascade(sdk: ReturnType<typeof useSdk>, threadId: string, signal: AbortSignal) {
+  const { threads } = await sdk.threads.experimental_listCascade({ threadIds: [threadId], action: "delete", signal });
+  return threads[0]?.cascadeThreadIds.length ?? 0;
 }
 
 // The browser bundle stays free of zod, so the GitHub PR Status contract uses

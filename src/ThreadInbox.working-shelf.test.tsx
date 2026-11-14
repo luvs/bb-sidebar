@@ -2,7 +2,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { renderSlot } from "./test-slot";
-import { isWorkingTree } from "./working-tree";
+import type { ThreadWorking } from "./child-status";
+import { isThreadWorkingForDisplay, isWorkingTree } from "./working-tree";
 import {
   inbox,
   SETTLED_NOTHING,
@@ -13,6 +14,8 @@ import {
   loadInboxApp,
   rowLinks,
 } from "./test-inbox";
+
+const noRowStatus: ThreadWorking = (candidate) => isThreadWorkingForDisplay(candidate, null);
 
 vi.mock("sonner", async () => (await import("./test-inbox")).sonnerMock());
 
@@ -246,8 +249,8 @@ describe("parking threads", () => {
       await waitFor(() => expect(card("Busy work").classList.contains("h-8")).toBe(compactWorkingThreads));
       expect(card("Asking work").classList.contains("h-8")).toBe(false);
       expect(card("Idle work").classList.contains("h-8")).toBe(false);
-      // The folded row keeps bb's spinner and the full label for screen readers.
-      expect(card("Busy work").querySelector('[data-icon="Loading"]') !== null).toBe(compactWorkingThreads);
+      // The folded row keeps the working glyph and the full label for screen readers.
+      expect(card("Busy work").querySelector('[data-icon="Working"]') !== null).toBe(compactWorkingThreads);
       expect(within(card("Busy work") as HTMLElement).getByText("Working")).toBeDefined();
     },
   );
@@ -329,7 +332,7 @@ describe("parking threads", () => {
   it("counts live descendants despite unread success and keeps requests for input in Active", () => {
     const parent = thread({ id: "parent" });
     const liveChild = thread({ id: "child", parentThreadId: "parent", indicator: "unread-success", status: "active" });
-    expect(isWorkingTree(parent, [liveChild], new Map())).toBe(true);
+    expect(isWorkingTree(parent, [liveChild], new Map(), noRowStatus)).toBe(true);
     const askingParent = thread({
       id: "asking",
       indicator: "waiting-for-input",
@@ -340,7 +343,7 @@ describe("parking threads", () => {
         planMode: 0,
       },
     });
-    expect(isWorkingTree(askingParent, [], new Map())).toBe(false);
+    expect(isWorkingTree(askingParent, [], new Map(), noRowStatus)).toBe(false);
   });
 
   it("keeps Unpin clickable on a parent compacted by child work", async () => {

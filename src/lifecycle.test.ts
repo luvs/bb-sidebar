@@ -7,8 +7,6 @@ import {
   formatPickedSnooze,
   formatSnoozeWakeTime,
   DEFAULT_SNOOZE_PRESET_CONFIG,
-  hasLiveWork,
-  legacyGoalCount,
   nextWakeDelayMs,
   parseConfiguredSnoozePresets,
   resolveShelf,
@@ -53,22 +51,6 @@ describe("canPark", () => {
 
   it("allows a quiet thread", () => {
     expect(canPark(quiet)).toBe(true);
-  });
-});
-
-describe("legacy goals", () => {
-  const idle = { workflows: 0, backgroundAgents: 0, backgroundCommands: 0, planMode: 0 };
-
-  it("reads a running goal from either thread view of an older host", () => {
-    expect(legacyGoalCount({ ...idle, goals: 2 })).toBe(2);
-    expect(legacyGoalCount({ activeGoalCount: 1 })).toBe(1);
-    expect(legacyGoalCount(idle)).toBe(0);
-  });
-
-  it("treats an older host's running goal as live work", () => {
-    expect(hasLiveWork(idle, false)).toBe(false);
-    expect(hasLiveWork({ ...idle, goals: 1 } as typeof idle, false)).toBe(true);
-    expect(hasLiveWork(idle, false, 1)).toBe(true);
   });
 });
 

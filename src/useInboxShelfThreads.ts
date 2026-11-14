@@ -15,6 +15,7 @@ import { isWorkingTree } from "./working-tree";
 import { threadNeedsAttention } from "./useRenamingShelfLocks";
 import { threadsWithAskingDescendants } from "./child-status";
 import { attentionCounts, threadMatchesStates, type AttentionState } from "./thread-filter";
+import { useWorkingForDisplay } from "./StatusSlot";
 
 interface InboxShelfThreadsOptions {
   activeThreadId: string | null;
@@ -43,6 +44,7 @@ export function useInboxShelfThreads({
   threads,
   workingShelfEnabled,
 }: InboxShelfThreadsOptions) {
+  const isWorking = useWorkingForDisplay();
   return useMemo(() => {
     const allVisible = visibleInboxThreads(threads);
     const inScope = filterByProjects(allVisible, scope);
@@ -50,7 +52,7 @@ export function useInboxShelfThreads({
     // does not match stands on its own, like any orphan.
     const matches = (thread: PluginSidebarThread) => threadMatchesStates(thread, states);
     const scoped = states.size > 0 ? inScope.filter(matches) : inScope;
-    // Children live in their parent's header chip instead of the flat list;
+    // Children are listed inside their parent's row instead of the flat list;
     // an orphan whose parent is not on screen stays here.
     const visible = hideChildrenOfVisibleParents(scoped);
     const active: typeof visible = [];
@@ -92,7 +94,7 @@ export function useInboxShelfThreads({
       if (
         workingShelfEnabled &&
         !lifecycle.wokeFor(thread) &&
-        isWorkingTree(thread, childrenByParentId.get(thread.id) ?? [], childrenByParentId)
+        isWorkingTree(thread, childrenByParentId.get(thread.id) ?? [], childrenByParentId, isWorking)
       ) {
         working.push(thread);
       } else if (!askingParentIds.has(thread.id) && isInactiveThread(thread, now, inactiveAfterHours)) {
@@ -128,6 +130,7 @@ export function useInboxShelfThreads({
     archived,
     childrenByParentId,
     inactiveAfterHours,
+    isWorking,
     lifecycle,
     now,
     renamingShelfLocks,

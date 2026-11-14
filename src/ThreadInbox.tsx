@@ -1,7 +1,7 @@
 import { useProviders } from "./bb-sdk";
 import { STORAGE_KEYS } from "./lib/storage-keys";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useBbNavigate, type PluginSidebarThread, type PluginThreadListProps } from "@get-bb/plugin-sdk/app";
+import type { PluginSidebarThread, PluginThreadListProps } from "@get-bb/plugin-sdk/app";
 import { useInboxShelfThreads } from "./useInboxShelfThreads";
 import { createDragReorderHandler } from "./drag-reorder";
 import type { InboxDragOrder } from "./drag-reorder-geometry";
@@ -26,6 +26,9 @@ import { createInboxThreadRenderer } from "./InboxThreadRenderer";
 import { childThreadsByParent, collapsedChildThreads } from "./ChildThreadList";
 import { useChildThreadDisplayValue } from "./ChildThreadDisplay";
 import { useLifecycle } from "./useLifecycle";
+import { useLifecycleRows, type LifecycleRows } from "./useLifecycleRows";
+import { useLiveThreads } from "./useLiveThreads";
+import type { PortScanScope } from "./OpenPorts";
 import type { createDragPreview } from "./drag-preview";
 import { usePinnedReorder } from "./usePinnedReorder";
 import { useCollapseChildrenOnSettle } from "./useCollapseChildrenOnSettle";
@@ -40,7 +43,9 @@ import { movePinnedIdByOffset, orderPinnedThreads, rebaseMovedId } from "./pinne
 import { parseConfiguredSnoozePresets } from "./lifecycle";
 import { parseInactiveAfterHours } from "./inactive";
 import { DEFAULT_SIDEBAR_SETTINGS } from "./sidebar-settings";
+import { useWorkingForDisplay } from "./StatusSlot";
 import { useScrollFade } from "./useScrollFade";
+import { useShelveActions } from "./useShelveActions";
 import { usePersistedPreference } from "./lib/use-persisted-preference";
 import { activeSortCodec, childExpansionCodec } from "./lib/inbox-preference-codecs";
 import { useInboxThreads, useThreadFilter, type InboxThreads } from "./useThreadFilter";
@@ -57,9 +62,13 @@ type ActiveShelfKind = "pinned" | "inbox";
  */
 export function ThreadInbox(props: PluginThreadListProps) {
   const snapshot = useInboxThreads();
+  // Read above the limit provider: it skips settled threads, and the inbox
+  // below reads its limit rows to place snoozed ones.
+  const lifecycleRows = useLifecycleRows();
+  const { settled, portScope } = useLiveThreads(snapshot.threads, lifecycleRows);
   return (
-    <RateLimitsProvider threads={snapshot.threads}>
-      <ThreadInboxContent {...props} snapshot={snapshot} />
+    <RateLimitsProvider threads={snapshot.threads} settledThreadIds={settled}>
+      <ThreadInboxContent {...props} snapshot={snapshot} lifecycleRows={lifecycleRows} portScope={portScope} />
     </RateLimitsProvider>
   );
 }
@@ -69,22 +78,23 @@ function ThreadInboxContent({
   onNavigate,
   isCompactViewport,
   snapshot,
+  lifecycleRows,
+  portScope,
 }: PluginThreadListProps & {
   snapshot: InboxThreads;
+  lifecycleRows: LifecycleRows;
+  portScope: PortScanScope;
 }) {
   const { status, threads, projects } = snapshot;
-  const workingSince = useWorkingSince(threads);
+  const workingSince = useWorkingSince(threads, status);
   const { providers } = useProviders();
-  const navigate = useBbNavigate();
   const sidebarSettings = useSidebarSettings();
-  const lifecycle = useLifecycle(threads);
+  const lifecycle = useLifecycle(threads, lifecycleRows);
   const projectIconRevision = useProjectIconRevision();
   const listAnimationController = useMemo(() => createListAnimationController(!isCompactViewport), [isCompactViewport]);
   const attachShelvesMotionRef = useListMotion<HTMLDivElement>(listAnimationController);
   const attachDockMotionRef = useListMotion<HTMLDivElement>(listAnimationController);
   const attachScrollFadeRef = useScrollFade<HTMLDivElement>();
-  const activeThreadIdRef = useRef(activeThreadId);
-  activeThreadIdRef.current = activeThreadId;
   const configuredSnoozePresets = sidebarSettings?.snoozePresets ?? DEFAULT_SIDEBAR_SETTINGS.snoozePresets;
   const snoozePresets = useMemo(() => parseConfiguredSnoozePresets(configuredSnoozePresets), [configuredSnoozePresets]);
   const inactiveAfterHours = parseInactiveAfterHours(
@@ -193,6 +203,7 @@ function ThreadInboxContent({
   const working = useMemo(() => orderPinnedThreads(workingBase, inboxReorder.ids), [workingBase, inboxReorder.ids]);
   const inactive = useMemo(() => orderPinnedThreads(inactiveBase, inboxReorder.ids), [inactiveBase, inboxReorder.ids]);
   // Keep the root of an attention path reachable when its shelf is folded.
+  const isWorking = useWorkingForDisplay();
   const attentionParentIds = useMemo(() => {
     const ids = new Set<string>();
     if (
@@ -201,12 +212,22 @@ function ThreadInboxContent({
       return ids;
     }
     for (const thread of [...pinnedBase, ...inboxBase, ...inactiveBase]) {
-      if (collapsedChildThreads(childrenByParentId.get(thread.id) ?? [], childrenByParentId, null, true).length > 0) {
+      if (
+        collapsedChildThreads(childrenByParentId.get(thread.id) ?? [], childrenByParentId, null, true, isWorking)
+          .length > 0
+      ) {
         ids.add(thread.id);
       }
     }
     return ids;
-  }, [childrenByParentId, inactiveBase, inboxBase, pinnedBase, sidebarSettings?.showRunningChildrenWhenCollapsed]);
+  }, [
+    childrenByParentId,
+    inactiveBase,
+    inboxBase,
+    isWorking,
+    pinnedBase,
+    sidebarSettings?.showRunningChildrenWhenCollapsed,
+  ]);
   const visiblePinned = useMemo(
     () => visibleShelfThreads(pinned, expandedShelves.pinned, activeListThreadId, undefined, attentionParentIds),
     [attentionParentIds, activeListThreadId, expandedShelves.pinned, pinned],
@@ -242,20 +263,6 @@ function ThreadInboxContent({
     () => sortActiveThreads(visibleInbox, activeSortMode),
     [activeSortMode, visibleInbox],
   );
-  // Leaving a thread follows Pinned, then Active, including collapsed rows.
-  const nextThreadCandidates = useMemo(
-    () => [
-      ...pinned,
-      ...(activeSortMode === "project"
-        ? inboxProjectUnits.flatMap((unit) => (unit.kind === "thread" ? [unit.thread] : unit.threads))
-        : sortActiveThreads(inbox, activeSortMode)),
-      ...working,
-    ],
-    [activeSortMode, inbox, inboxProjectUnits, pinned, working],
-  );
-  const nextThreadCandidatesRef = useRef(nextThreadCandidates);
-  nextThreadCandidatesRef.current = nextThreadCandidates;
-
   // A drag installs its listeners once, at pointer-down, but the shelf keeps
   // moving underneath it: the host pushes order changes mid-gesture. The order
   // and the membership a drop depends on are therefore read through these refs
@@ -395,40 +402,13 @@ function ThreadInboxContent({
     [inactive, inbox, lifecycle, pinned, working],
   );
 
-  const parkActiveThread = useCallback(
-    async (thread: PluginSidebarThread, mutation: () => Promise<boolean>) => {
-      const parked = await mutation();
-      if (!parked || activeThreadIdRef.current !== thread.id) return;
-
-      // Read the latest list after the request, since another client may
-      // have moved or reordered the first candidate while it was pending.
-      const nextThread = nextThreadCandidatesRef.current.find((candidate) => candidate.id !== thread.id);
-      if (nextThread) {
-        navigate.toThread(nextThread.id);
-      } else {
-        navigate.toCompose({
-          projectId: thread.projectId,
-          focusPrompt: true,
-        });
-      }
-      onNavigate();
-    },
-    [navigate, onNavigate],
-  );
-
-  const parkThread = useCallback(
-    (thread: PluginSidebarThread) => void parkActiveThread(thread, () => lifecycle.park(thread.id)),
-    [parkActiveThread, lifecycle],
-  );
-  const settleThread = useCallback(
-    (thread: PluginSidebarThread) => void parkActiveThread(thread, () => lifecycle.settle(thread.id)),
-    [parkActiveThread, lifecycle],
-  );
-  const snoozeThread = useCallback(
-    (thread: PluginSidebarThread, until: number) =>
-      void parkActiveThread(thread, () => lifecycle.snooze(thread.id, until)),
-    [parkActiveThread, lifecycle],
-  );
+  const { parkThread, settleThread, snoozeThread } = useShelveActions({
+    threads,
+    scope,
+    lifecycle,
+    activeThreadId,
+    onNavigate,
+  });
 
   const inboxContext = useInboxContextValues({
     providerById,
@@ -466,6 +446,7 @@ function ThreadInboxContent({
       listAnimationController={listAnimationController}
       workingSince={workingSince}
       childDisplay={childDisplay}
+      portScope={portScope}
     >
       <ThreadInboxView
         shelves={{

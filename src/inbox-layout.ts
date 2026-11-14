@@ -1,8 +1,9 @@
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
+import type { ChildStatusKind } from "./child-status";
 import type { OrderUnit } from "./pinned-order";
 import { visibleInboxThreads } from "./inbox";
 
-export const ACTIVE_SORT_MODES = ["manual", "activity", "created", "project"] as const;
+export const ACTIVE_SORT_MODES = ["manual", "activity", "waiting", "created", "project"] as const;
 export type ActiveSortMode = (typeof ACTIVE_SORT_MODES)[number];
 
 export type ReorderMode = "thread" | "unit";
@@ -16,15 +17,23 @@ export function isActiveSortMode(value: string): value is ActiveSortMode {
   return ACTIVE_SORT_MODES.some((mode) => mode === value);
 }
 
-// A project needs this many Active threads before it earns a header; below
-// it, its thread stays an ordinary card in the project's slot.
+// Unless every project is grouped, a project needs this many Active threads
+// before it earns a header; below it, its thread stays an ordinary card in the
+// project's slot.
 const MIN_PROJECT_GROUP_SIZE = 2;
+
+/** How many threads a collapsed group hides with one kind of news. */
+export interface GroupAlert {
+  kind: Exclude<ChildStatusKind, "working">;
+  count: number;
+}
 
 export type ProjectViewUnit =
   | Extract<ProjectUnit, { kind: "thread" }>
   | (Omit<Extract<ProjectUnit, { kind: "group" }>, "children"> & {
       expanded: boolean;
       threadCount: number;
+      alerts: GroupAlert[];
       children?: ProjectViewUnit[];
     });
 
@@ -51,12 +60,15 @@ export function projectUnitKey(projectId: string): string {
  * order, so a project stays put while its threads leave Active and come back.
  * Projects the order has not seen yet come first, in the order their first
  * threads appear. Threads keep the inbox order within their project. A project
- * with enough threads is drawn as a group; a smaller one is its lone thread.
+ * with enough threads is drawn as a group; a smaller one is its lone thread,
+ * unless `groupSingleThreads` draws every project as a group.
  */
 export function layoutActiveThreadsByProject(
   inbox: readonly PluginSidebarThread[],
   projectOrder: readonly string[] = [],
+  groupSingleThreads = false,
 ): ProjectUnit[] {
+  const minGroupSize = groupSingleThreads ? 1 : MIN_PROJECT_GROUP_SIZE;
   const threadsByProject = new Map<string, PluginSidebarThread[]>();
   for (const thread of inbox) {
     const threads = threadsByProject.get(thread.projectId);
@@ -66,7 +78,7 @@ export function layoutActiveThreadsByProject(
   return mergeProjectOrder(projectOrder, [...threadsByProject.keys()]).flatMap((projectId): ProjectUnit[] => {
     const threads = threadsByProject.get(projectId);
     if (!threads) return [];
-    if (threads.length < MIN_PROJECT_GROUP_SIZE) return [{ kind: "thread", key: threads[0]!.id, thread: threads[0]! }];
+    if (threads.length < minGroupSize) return [{ kind: "thread", key: threads[0]!.id, thread: threads[0]! }];
     return [{ kind: "group", key: projectUnitKey(projectId), projectId, threads }];
   });
 }
@@ -100,10 +112,26 @@ export function sameOrder(left: readonly string[], right: readonly string[]): bo
   return left.length === right.length && left.every((id, index) => id === right[index]);
 }
 
+/** Whether the mode orders Active by time, so the rows have no manual order to drag. */
+export function sortsActiveByTime(mode: ActiveSortMode): boolean {
+  return mode === "activity" || mode === "waiting" || mode === "created";
+}
+
 export function sortActiveThreads(
   threads: readonly PluginSidebarThread[],
   mode: ActiveSortMode,
 ): PluginSidebarThread[] {
+  if (mode === "waiting") {
+    // bb moves `latestAttentionAt` when a turn finishes, not when the thread is
+    // read, renamed, or pinned, so a thread joins the end once it has news and
+    // then holds its place until it has more.
+    return [...threads].sort(
+      (left, right) =>
+        left.latestAttentionAt - right.latestAttentionAt ||
+        left.createdAt - right.createdAt ||
+        left.id.localeCompare(right.id),
+    );
+  }
   if (mode !== "activity" && mode !== "created") return [...threads];
   const primaryKey = mode === "activity" ? "updatedAt" : "createdAt";
   return [...threads].sort(

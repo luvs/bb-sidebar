@@ -19,7 +19,7 @@ import { ProjectColorsProvider } from "./ProjectColors";
 import { WorkingSinceContext } from "./useWorkingSince";
 import type { WorkingSince } from "./working-since";
 import { ChildThreadDisplayContext, type ChildThreadDisplay } from "./ChildThreadDisplay";
-import { OpenPortsProvider } from "./OpenPorts";
+import { OpenPortsProvider, type PortScanScope } from "./OpenPorts";
 import type { ActiveSortMode } from "./inbox-layout";
 import type { useRenamingShelfLocks } from "./useRenamingShelfLocks";
 
@@ -137,12 +137,14 @@ export function InboxProvider({
   listAnimationController,
   workingSince,
   childDisplay,
+  portScope,
   children,
 }: {
   value: InboxValues;
   listAnimationController: ListAnimationController;
   workingSince: WorkingSince;
   childDisplay: ChildThreadDisplay;
+  portScope: PortScanScope;
   children: ReactNode;
 }) {
   const { sidebarSettings, projects } = value.environment;
@@ -156,7 +158,7 @@ export function InboxProvider({
       >
         <WorkingSinceContext.Provider value={workingSince}>
           <ChildThreadDisplayContext.Provider value={childDisplay}>
-            <OpenPortsProvider>
+            <OpenPortsProvider scope={portScope}>
               <InboxEnvironmentContext.Provider value={value.environment}>
                 <InboxActionsContext.Provider value={value.actions}>
                   <InboxActivityContext.Provider value={value.activity}>{children}</InboxActivityContext.Provider>
@@ -200,22 +202,20 @@ type ExplicitChildListInputs = {
 export type InboxChildListInputs = {
   now?: number;
   activeThreadId?: string | null;
-} & (({ variant: "header" } & ExplicitChildListInputs) | ({ variant: "sidebar" } & Partial<ExplicitChildListInputs>));
+} & Partial<ExplicitChildListInputs>;
 
-/** Header popovers and standalone lists keep their explicit inputs. */
+/** Inputs a list leaves out come from the inbox; a standalone list passes them all. */
 export function useInboxChildList<T extends InboxChildListInputs>(props: T) {
   const environment = useContext(InboxEnvironmentContext);
   const actions = useContext(InboxActionsContext);
   const activity = useContext(InboxActivityContext);
-  const sidebar = props.variant === "sidebar";
   const childrenByParent = props.childrenByParent ?? requireInboxContext(environment).childrenByParentId;
   const onThreadOpen = props.onThreadOpen ?? requireInboxContext(actions).onNavigate;
   return {
     ...props,
     childrenByParent,
     onThreadOpen,
-    now: props.now ?? (sidebar ? activity?.now : undefined),
-    activeThreadId:
-      props.activeThreadId !== undefined ? props.activeThreadId : sidebar ? activity?.activeThreadId : undefined,
+    now: props.now ?? activity?.now,
+    activeThreadId: props.activeThreadId !== undefined ? props.activeThreadId : activity?.activeThreadId,
   };
 }

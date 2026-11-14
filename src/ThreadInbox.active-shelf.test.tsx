@@ -164,6 +164,7 @@ describe("ThreadInbox", () => {
           title: "Alpha new",
           createdAt: 3,
           updatedAt: 10,
+          latestAttentionAt: 50,
         }),
         thread({
           id: "beta-new",
@@ -171,6 +172,7 @@ describe("ThreadInbox", () => {
           title: "Beta new",
           createdAt: 4,
           updatedAt: 30,
+          latestAttentionAt: 20,
         }),
         thread({
           id: "alpha-old",
@@ -178,6 +180,7 @@ describe("ThreadInbox", () => {
           title: "Alpha old",
           createdAt: 1,
           updatedAt: 40,
+          latestAttentionAt: 30,
         }),
         thread({
           id: "beta-old",
@@ -185,6 +188,7 @@ describe("ThreadInbox", () => {
           title: "Beta old",
           createdAt: 2,
           updatedAt: 20,
+          latestAttentionAt: 10,
         }),
       ],
       [
@@ -215,6 +219,7 @@ describe("ThreadInbox", () => {
     fireEvent.keyDown(sortMenu, { key: "Enter" });
     expect(screen.getByRole("radio", { name: "Manual order" })).toBeDefined();
     expect(screen.getByRole("radio", { name: "Recent activity" })).toBeDefined();
+    expect(screen.getByRole("radio", { name: "Waiting longest" })).toBeDefined();
     expect(screen.getByRole("radio", { name: "Date created" })).toBeDefined();
     expect(screen.getByRole("radio", { name: "Project" })).toBeDefined();
     fireEvent.click(screen.getByRole("radio", { name: "Recent activity" }), { detail: 1 });
@@ -234,6 +239,26 @@ describe("ThreadInbox", () => {
     fireEvent.keyDown(
       within(activeShelf).getByRole("button", {
         name: "Sort active threads: Recent activity",
+      }),
+      { key: "Enter" },
+    );
+    fireEvent.click(screen.getByRole("radio", { name: "Waiting longest" }), { detail: 1 });
+    // Oldest news first: Alpha old's later update, such as a read, does not lift it.
+    expect(
+      within(activeShelf)
+        .getAllByRole("listitem")
+        .map((row) => row.textContent),
+    ).toEqual([
+      expect.stringContaining("Beta old"),
+      expect.stringContaining("Beta new"),
+      expect.stringContaining("Alpha old"),
+      expect.stringContaining("Alpha new"),
+    ]);
+    expect(rowLinks(activeShelf).every((link) => link.getAttribute("aria-keyshortcuts") === null)).toBe(true);
+
+    fireEvent.keyDown(
+      within(activeShelf).getByRole("button", {
+        name: "Sort active threads: Waiting longest",
       }),
       { key: "Enter" },
     );
@@ -294,6 +319,7 @@ describe("ThreadInbox", () => {
 
   it("names a project once in a header when it has two or more threads", () => {
     window.localStorage.setItem("bb-sidebar:active-sort:v1", "project");
+    window.localStorage.setItem("bb-sidebar:single-thread-project-grouping:v1", "false");
     window.localStorage.setItem(
       "bb-sidebar:inbox-order-cache:v1",
       JSON.stringify(["web-1", "zed-1", "web-2", "api-1"]),
@@ -358,8 +384,38 @@ describe("ThreadInbox", () => {
     ).toEqual([expect.stringMatching(/^Web.*Second/)]);
   });
 
+  it("gives one-thread projects a collapsible header until the option is turned off", async () => {
+    window.localStorage.setItem("bb-sidebar:active-sort:v1", "project");
+    render(
+      [
+        thread({ id: "zed-1", projectId: "zed", title: "Zed thread", createdAt: 2 }),
+        thread({ id: "api-1", projectId: "api", title: "Api thread", createdAt: 1 }),
+      ],
+      [
+        { id: "api", name: "Api", isPersonal: false, href: "", settingsHref: "" },
+        { id: "zed", name: "Zed", isPersonal: false, href: "", settingsHref: "" },
+      ],
+    );
+
+    const headers = () =>
+      screen.queryAllByRole("button", { name: /\(\d+\)$/ }).map((header) => header.getAttribute("aria-label"));
+    expect(headers()).toEqual(["Zed (1)", "Api (1)"]);
+    fireEvent.click(screen.getByRole("button", { name: "Zed (1)", expanded: true }));
+    expect(screen.queryByText("Zed thread")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Sort active threads: Project" }));
+    const option = screen.getByRole("checkbox", { name: "Group single-thread projects" });
+    expect((option as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(option);
+    expect(headers()).toEqual([]);
+    await waitFor(() =>
+      expect(window.localStorage.getItem("bb-sidebar:single-thread-project-grouping:v1")).toBe("false"),
+    );
+  });
+
   it("looks like manual order when no project has a second thread", () => {
     window.localStorage.setItem("bb-sidebar:active-sort:v1", "project");
+    window.localStorage.setItem("bb-sidebar:single-thread-project-grouping:v1", "false");
     render(
       [
         thread({ id: "zed-1", projectId: "zed", title: "Zed thread", createdAt: 2 }),
@@ -412,6 +468,27 @@ describe("ThreadInbox", () => {
     await waitFor(() =>
       expect(window.localStorage.getItem("bb-sidebar:project-collapse:v1")).toBe(JSON.stringify(["web"])),
     );
+  });
+
+  it("marks a collapsed project with a dot for each kind of news it hides", async () => {
+    window.localStorage.setItem("bb-sidebar:active-sort:v1", "project");
+    window.localStorage.setItem("bb-sidebar:project-collapse:v1", JSON.stringify(["web"]));
+    render(
+      [
+        thread({ id: "web-1", projectId: "web", title: "Done", indicator: "unread-success" }),
+        thread({ id: "web-2", projectId: "web", title: "Asks", hasPendingInteraction: true }),
+        thread({ id: "web-3", projectId: "web", title: "Asks too", indicator: "waiting-for-input" }),
+      ],
+      [{ id: "web", name: "Web", isPersonal: false, href: "", settingsHref: "" }],
+    );
+
+    const header = screen.getByRole("button", { name: "Web (3), 2 need you, 1 done", expanded: false });
+    expect(
+      [...header.querySelectorAll("[data-group-alert]")].map((dot) => dot.getAttribute("data-group-alert")),
+    ).toEqual(["needs-you", "done"]);
+    fireEvent.click(header);
+    const open = screen.getByRole("button", { name: "Web (3)", expanded: true });
+    expect(open.querySelector("[data-group-alerts]")).toBeNull();
   });
 
   it("lists threads newest first", () => {

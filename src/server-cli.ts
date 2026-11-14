@@ -1,6 +1,7 @@
 import { PluginCliError, cliCommand, defineCli } from "@get-bb/plugin-sdk";
 import type { PluginCliContext } from "@get-bb/plugin-sdk";
 import type { ServerHandlers } from "./server-context";
+import type { ThreadLimitState } from "./contract";
 import type { createServerLifecycle } from "./server-lifecycle";
 import {
   configuredSnoozePresetError,
@@ -8,8 +9,12 @@ import {
   MAX_SNOOZE_MS,
   parseConfiguredSnoozePresets,
   resolveConfiguredSnoozePreset,
-  resolveShelf,
+  resolveRowShelf,
+  type ThreadShelf,
+  waitsForScheduledContinue,
 } from "./lifecycle";
+import { shelfRowIds } from "./inbox";
+import { ancestorsOfAskingThreads } from "./child-status";
 
 type CliHandlers = Pick<
   ServerHandlers,
@@ -68,8 +73,56 @@ function parseWake(value: string, now = new Date()): number {
   return wake;
 }
 
-export function createServerCli(lifecycle: ReturnType<typeof createServerLifecycle>, handlers: CliHandlers) {
+/** The sidebar's provider-limit state for these threads, as its rows read it. */
+type ThreadLimits = (input: { keys: string[] }) => Promise<Record<string, ThreadLimitState | null>>;
+
+export function createServerCli(
+  lifecycle: ReturnType<typeof createServerLifecycle>,
+  handlers: CliHandlers,
+  threadLimits: ThreadLimits,
+) {
   const { loadPolicyThreads, readOne, threadSignals } = lifecycle;
+
+  /**
+   * Every thread with the shelf the sidebar shows it on. The sidebar lists
+   * all projects unless the user scopes it, so the tree is resolved across
+   * projects before any filter: a child goes wherever its parent's row goes.
+   */
+  const loadShelves = async (now = Date.now()) => {
+    const threads = await loadPolicyThreads();
+    const byId = new Map(threads.map((thread) => [thread.id, thread] as const));
+    const rowIds = shelfRowIds(threads);
+    // A child's question shows inside its parent's row, so it counts as the
+    // parent's own, as it does in the sidebar.
+    const asking = ancestorsOfAskingThreads(threads, (thread) => thread.hasPendingInteraction);
+    // A snooze can wait on the sidebar's own scheduled Continue, which bb
+    // reports as queued work. Only those threads need the limit lookup.
+    const waiting = threads.filter(
+      (thread) => thread.queuedWork === "waiting" && (readOne(thread.id)?.snoozedUntil ?? 0) > now,
+    );
+    const limits = waiting.length ? await threadLimits({ keys: waiting.map((thread) => thread.id) }) : {};
+    const rowShelves = new Map<string, ThreadShelf>();
+    const rowShelf = (thread: (typeof threads)[number]) => {
+      let shelf = rowShelves.get(thread.id);
+      if (shelf === undefined) {
+        const row = readOne(thread.id) ?? undefined;
+        const signals = threadSignals(thread);
+        if (asking.has(thread.id)) signals.hasPendingInteraction = true;
+        if (waitsForScheduledContinue(row, limits[thread.id]?.scheduled, thread.queuedWork, now)) {
+          signals.hasQueuedWork = false;
+        }
+        shelf = resolveRowShelf(row, signals, now, thread.pinnedAt !== null);
+        rowShelves.set(thread.id, shelf);
+      }
+      return shelf;
+    };
+    const placed = threads.map((thread) => {
+      // A thread in a parent cycle has no sidebar row; it keeps its own.
+      const rowThread = byId.get(rowIds.get(thread.id) ?? thread.id)!;
+      return { thread, rowThread, shelf: rowShelf(rowThread) };
+    });
+    return { placed, byId: new Map(placed.map((entry) => [entry.thread.id, entry] as const)) };
+  };
 
   return defineCli({
     name: "sidebar",
@@ -97,14 +150,8 @@ export function createServerCli(lifecycle: ReturnType<typeof createServerLifecyc
           json: { type: "boolean", description: "Emit JSON: { threads, total, offset, nextOffset }" },
         },
         async run({ options }, ctx) {
-          const now = Date.now();
-          const matching = (await loadPolicyThreads())
-            .filter((thread) => options.all || !ctx.projectId || thread.projectId === ctx.projectId)
-            .map((thread) => {
-              const row = readOne(thread.id);
-              const shelf = resolveShelf(row ?? undefined, threadSignals(thread), now);
-              return { thread, row, shelf };
-            })
+          const matching = (await loadShelves()).placed
+            .filter(({ thread }) => options.all || !ctx.projectId || thread.projectId === ctx.projectId)
             .filter(({ shelf }) => !options.state || shelf === options.state)
             // Ties break by id so pages stay stable between calls.
             .sort(
@@ -117,17 +164,18 @@ export function createServerCli(lifecycle: ReturnType<typeof createServerLifecyc
           const threads = matching.slice(offset, offset + options.limit);
           const nextOffset = offset + threads.length < total ? offset + threads.length : null;
           if (options.json) {
-            const rows = threads.map(({ thread, row, shelf }) => ({
+            const rows = threads.map(({ thread, rowThread, shelf }) => ({
               threadId: thread.id,
               title: thread.title,
               shelf,
               pinned: thread.pinnedAt !== null,
               parentThreadId: thread.parentThreadId,
-              snoozedUntil: shelf === "snoozed" ? (row?.snoozedUntil ?? null) : null,
+              snoozedUntil: shelf === "snoozed" ? (readOne(rowThread.id)?.snoozedUntil ?? null) : null,
             }));
             return { exitCode: 0, stdout: `${JSON.stringify({ threads: rows, total, offset, nextOffset })}\n` };
           }
-          const lines = threads.map(({ thread, row, shelf }) => {
+          const lines = threads.map(({ thread, rowThread, shelf }) => {
+            const row = shelf === "snoozed" ? readOne(rowThread.id) : null;
             const until =
               shelf === "snoozed" && row?.snoozedUntil ? ` until ${formatSnoozeWakeTime(row.snoozedUntil)}` : "";
             const pinned = thread.pinnedAt !== null ? " pinned" : "";
@@ -195,6 +243,17 @@ export function createServerCli(lifecycle: ReturnType<typeof createServerLifecyc
         run: ({ options }, ctx) => {
           const threadId = targetThread(options.thread, ctx);
           return act(async () => {
+            const placed = (await loadShelves()).byId.get(threadId);
+            if (placed?.shelf === "active") return `${threadId} is already active`;
+            // A child has no shelf of its own while its parent's row carries
+            // it; the sidebar returns it with that row, so name it.
+            if (placed && placed.rowThread.id !== threadId) {
+              const { id } = placed.rowThread;
+              throw new PluginCliError(`${threadId} is ${placed.shelf} with ${id}, the thread it is nested under`, {
+                code: "action_failed",
+                hint: `Resume the whole tree: bb sidebar resume --thread ${id}`,
+              });
+            }
             const row = readOne(threadId);
             // Each shelf has its own way back, matching the sidebar's menus.
             if (row?.snoozedUntil != null) await handlers.unsnooze({ threadId });

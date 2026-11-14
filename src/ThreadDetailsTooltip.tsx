@@ -1,5 +1,5 @@
 import { useProviders, useSidebarThreadSplit, useSidebarThreads } from "./bb-sdk";
-import { useEffect, useId, useState, type ReactElement } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactElement } from "react";
 import { useRpc, useRealtime, type PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import type { bbSidebarRpcContract } from "./contract";
 import { PROJECT_ICONS_CHANNEL } from "./realtime-channels";
@@ -9,23 +9,26 @@ import { Icon, type IconName } from "./components/Icon";
 import { ProviderGlyph } from "./ProviderGlyph";
 import { StatusGlyph } from "./StatusGlyph";
 import { useThreadRowStatus, useThreadWithDraft } from "./StatusSlot";
-import { ThreadStatusGlyph } from "./bb-sdk";
+import { StillThreadStatusGlyph } from "./StillThreadStatusGlyph";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { projectIconUrl } from "./project-icons";
-import { OpenPortDetails } from "./OpenPorts";
+import { OpenPortDetails, useLookUpOpenPorts } from "./OpenPorts";
 import { ThreadPullRequestDetails } from "./ThreadPullRequests";
 import { compareChildThreads, useChildThreadDisplay } from "./ChildThreadDisplay";
 import { cn } from "./lib/utils";
-import { useThreadLimit } from "./RateLimits";
+import { useLimitActions, useThreadLimit } from "./RateLimits";
 import { limitDescription, limitStatus } from "./rate-limit-labels";
 
 export function ThreadDetailsTooltip({
   thread,
   disabled,
+  isOpen = false,
   children,
 }: {
   thread: PluginSidebarThread;
   disabled: boolean;
+  /** The thread is open in bb. That also looks it up: touch screens never open the card. */
+  isOpen?: boolean;
   children: ReactElement;
 }) {
   const { providers } = useProviders();
@@ -80,6 +83,26 @@ export function ThreadDetailsTooltip({
       cancelled = true;
     };
   }, [call, thread.id, visible]);
+
+  // A settled thread is skipped by the recurring lookups, so looking at it
+  // asks once. Keyed on the open state alone: a context update mid-open must
+  // not ask again. Live threads make this a no-op.
+  const lookUpLimit = useLimitActions()?.lookUp;
+  const lookUpPorts = useLookUpOpenPorts();
+  const lookUps = useRef({ lookUpLimit, lookUpPorts, environmentId: thread.environment?.id });
+  lookUps.current = { lookUpLimit, lookUpPorts, environmentId: thread.environment?.id };
+  const lookUp = useCallback(
+    (looking: boolean) => {
+      if (!looking) return;
+      lookUps.current.lookUpLimit?.(thread.id);
+      lookUps.current.lookUpPorts(lookUps.current.environmentId ?? undefined);
+    },
+    [thread.id],
+  );
+  // Each trigger on its own: hovering the open thread still asks again once
+  // the last answer is older than 30s.
+  useEffect(() => lookUp(visible), [lookUp, visible]);
+  useEffect(() => lookUp(isOpen), [lookUp, isOpen]);
 
   const { sort: childSort } = useChildThreadDisplay();
   const statusThread = useThreadWithDraft(thread);
@@ -151,7 +174,7 @@ export function ThreadDetailsTooltip({
           // Another plugin's row status, spelled out: the row only has room for its glyph.
           <div className="flex items-center gap-2">
             <span className="flex size-3.5 shrink-0 items-center justify-center">
-              <ThreadStatusGlyph indicator="none" rowStatus={rowStatus} size="compact" />
+              <StillThreadStatusGlyph indicator="none" rowStatus={rowStatus} size="compact" />
             </span>
             <span className="min-w-0 flex-1 truncate">{rowStatus.label}</span>
           </div>

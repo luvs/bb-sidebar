@@ -1,5 +1,4 @@
 import type { PluginSidebarThread, PluginSidebarThreadIndicator } from "@get-bb/plugin-sdk/app";
-import type { HostIndicator } from "./lifecycle";
 
 /**
  * What a parent card says about its subtree when the list is collapsed.
@@ -21,30 +20,63 @@ interface ChildStatusSummary {
   dominant: ChildStatusKind | null;
 }
 
-export function isWorkingIndicator(indicator: PluginSidebarThreadIndicator): boolean {
-  switch (indicator as HostIndicator) {
-    case "runtime":
-    case "workflow":
-    case "background-agent":
-    case "background-command":
-    case "plan-mode":
-    case "goal":
-    case "working-draft":
-      return true;
-    default:
-      return false;
-  }
+/**
+ * Every indicator this sidebar draws itself. bb adds kinds faster than the
+ * plugin ships: a kind missing here is drawn with bb's own glyph and label
+ * (see StatusGlyph and StatusOrTime), so users never lose a status bb shows.
+ * A test fails the build when the pinned SDK names a kind this list lacks.
+ */
+export const KNOWN_INDICATORS = [
+  "background-agent",
+  "background-command",
+  "draft",
+  "none",
+  "plan-mode",
+  "queued-failed",
+  "queued-waiting",
+  "runtime",
+  "unread-error",
+  "unread-success",
+  "waiting-for-input",
+  "workflow",
+  "working-draft",
+] as const satisfies readonly PluginSidebarThreadIndicator[];
+
+const knownIndicators: ReadonlySet<string> = new Set(KNOWN_INDICATORS);
+
+/** Whether this sidebar has its own glyph and wording for the indicator. */
+export function isKnownIndicator(indicator: PluginSidebarThreadIndicator): boolean {
+  return knownIndicators.has(indicator);
 }
 
-export function childStatusKind(thread: PluginSidebarThread): ChildStatusKind | null {
+/**
+ * The `default` branch of a switch over every indicator. Its `never`
+ * parameter fails typecheck when a new SDK kind has no case; at runtime it
+ * hands back the unknown kind, which callers pass to bb to draw.
+ */
+export function unhandledIndicator(indicator: never): PluginSidebarThreadIndicator {
+  return indicator;
+}
+
+/**
+ * Whether a thread is working, for display. App code passes
+ * isThreadWorkingForDisplay from working-tree.ts with each thread's own row
+ * status; this shared module cannot call bb's status resolver itself.
+ */
+export type ThreadWorking = (thread: PluginSidebarThread) => boolean;
+
+export function childStatusKind(thread: PluginSidebarThread, isWorking: ThreadWorking): ChildStatusKind | null {
   if (thread.indicator === "unread-error" || thread.queuedWork === "failed") return "failed";
   if (threadAsksForInput(thread)) return "needs-you";
   if (thread.indicator === "unread-success") return "done";
-  if (isWorkingIndicator(thread.indicator)) return "working";
+  if (isWorking(thread)) return "working";
   return null;
 }
 
-export function childStatusSummary(threads: readonly PluginSidebarThread[]): ChildStatusSummary {
+export function childStatusSummary(
+  threads: readonly PluginSidebarThread[],
+  isWorking: ThreadWorking,
+): ChildStatusSummary {
   const summary: ChildStatusSummary = {
     failed: 0,
     needsYou: 0,
@@ -54,7 +86,7 @@ export function childStatusSummary(threads: readonly PluginSidebarThread[]): Chi
   };
   for (const thread of threads) {
     if (thread.isArchived) continue;
-    switch (childStatusKind(thread)) {
+    switch (childStatusKind(thread, isWorking)) {
       case "failed":
         summary.failed += 1;
         break;
@@ -129,10 +161,21 @@ export function threadAsksForInput(thread: PluginSidebarThread): boolean {
  * Walks up from each asking thread; archived ancestors and cycles stop it.
  */
 export function threadsWithAskingDescendants(threads: readonly PluginSidebarThread[]): ReadonlySet<string> {
+  return ancestorsOfAskingThreads(threads, threadAsksForInput);
+}
+
+/**
+ * The same walk over any thread shape, given what counts as asking. The
+ * server's thread lists have no row indicator, so `bb sidebar list` asks with
+ * `hasPendingInteraction` alone.
+ */
+export function ancestorsOfAskingThreads<
+  T extends { readonly id: string; readonly parentThreadId: string | null; readonly isArchived?: boolean },
+>(threads: readonly T[], asks: (thread: T) => boolean): ReadonlySet<string> {
   const result = new Set<string>();
-  let byId: ReadonlyMap<string, PluginSidebarThread> | undefined;
+  let byId: ReadonlyMap<string, T> | undefined;
   for (const thread of threads) {
-    if (thread.isArchived || thread.parentThreadId === null || !threadAsksForInput(thread)) continue;
+    if (thread.isArchived || thread.parentThreadId === null || !asks(thread)) continue;
     byId ??= new Map(threads.map((candidate) => [candidate.id, candidate]));
     const visited = new Set([thread.id]);
     let parent = byId.get(thread.parentThreadId);

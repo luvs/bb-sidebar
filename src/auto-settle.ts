@@ -1,4 +1,4 @@
-import { canPark, hasLiveWork, isTurnInFlight, legacyGoalCount } from "./lifecycle";
+import { canPark, hasLiveWork, isTurnInFlight, rowActivity, type ThreadRowActivity } from "./lifecycle";
 
 export const MIN_AUTO_SETTLE_AFTER_DAYS = 1;
 export const MAX_AUTO_SETTLE_AFTER_DAYS = 90;
@@ -15,14 +15,7 @@ export interface AutoSettleLifecycleState {
 
 /** The fields of a bb project-thread row that the policy reads. */
 export interface AutoSettleThread {
-  activity: {
-    activeBackgroundAgentCount: number;
-    activeBackgroundCommandCount: number;
-    /** Reported only by bb 0.47 and 0.48; see `legacyGoalCount`. */
-    activeGoalCount?: number;
-    activePlanModeCount: number;
-    activeWorkflowCount: number;
-  };
+  activity: ThreadRowActivity;
   createdAt: number;
   hasPendingInteraction: boolean;
   latestAttentionAt: number;
@@ -50,17 +43,7 @@ type AutoSettleDecision = "keep" | "settle" | "unsettle";
 
 /** The same live work that blocks a manual settle in the sidebar. */
 function isWorking(thread: AutoSettleThread): boolean {
-  const { activity } = thread;
-  return hasLiveWork(
-    {
-      workflows: activity.activeWorkflowCount,
-      backgroundAgents: activity.activeBackgroundAgentCount,
-      backgroundCommands: activity.activeBackgroundCommandCount,
-      planMode: activity.activePlanModeCount,
-    },
-    isTurnInFlight(thread.status),
-    legacyGoalCount(activity),
-  );
+  return hasLiveWork(rowActivity(thread.activity), isTurnInFlight(thread.status));
 }
 
 // Settling also stops the thread's runtime, so anything the sidebar would
@@ -84,6 +67,23 @@ export function autoSettleNeedsPullRequest(
   thread: AutoSettleThread,
 ): boolean {
   return lifecycle?.settledOverride == null && !cannotAutoSettle(lifecycle, thread);
+}
+
+/** Settled by the policy itself, not by the user. */
+export function isAutoSettled(lifecycle: AutoSettleLifecycleState | null): boolean {
+  return lifecycle?.settledAt != null && lifecycle.settledOverride == null;
+}
+
+/**
+ * An ordinary pass leaves a thread the policy settled alone. Only the checks
+ * that need no PR lookup can return it to Active: anything that would keep a
+ * live thread out of policy reach, such as a pin or running work.
+ */
+export function decideAutoSettledThread(
+  lifecycle: AutoSettleLifecycleState | null,
+  thread: AutoSettleThread,
+): AutoSettleDecision {
+  return cannotAutoSettle(lifecycle, thread) ? "unsettle" : "keep";
 }
 
 /** Invalid settings disable inactivity settling instead of hiding work. */

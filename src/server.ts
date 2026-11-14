@@ -10,6 +10,7 @@ import { AUTO_TITLE_RECOVERY_MIGRATION, createAutoTitleRecovery } from "./auto-t
 import { createServerSettings, INSTALL_DEFAULTS_MIGRATIONS } from "./server-settings";
 import { createServerLifecycle, LIFECYCLE_BACKFILLS_MIGRATION } from "./server-lifecycle";
 import { createServerProjectIcons } from "./server-project-icons";
+import { PROJECT_ICON_MISSING_HEADER } from "./project-icons";
 import { createServerProjectColors } from "./server-project-colors";
 import { createServerProjectManagement } from "./server-project-management";
 import { createServerSettleCleanup } from "./server-settle-cleanup";
@@ -147,7 +148,7 @@ export default async function plugin(bb: BbPluginApi) {
     { icons, colors, projects, settle },
   );
   const { resolveProjectIcon } = icons;
-  const { wakeAncestors, clearSettlingState, clear } = lifecycle;
+  const { wakeAncestors, clearSettlingState, clear, settleUnarchivedTree } = lifecycle;
   ctx.bb.http.route("GET", "/project-icon", async (context) => {
     const projectId = context.req.query("projectId")?.trim();
     const environmentId = context.req.query("environmentId")?.trim() || null;
@@ -158,7 +159,9 @@ export default async function plugin(bb: BbPluginApi) {
     } catch {
       return context.body(null, 503, { "cache-control": "no-store" });
     }
-    if (!icon) return context.body(null, 404, { "cache-control": "no-store" });
+    // Marked so the app can tell "this project has no icon" from a 404 bb
+    // answers while the plugin is still loading (see ProjectFavicon).
+    if (!icon) return context.body(null, 404, { "cache-control": "no-store", [PROJECT_ICON_MISSING_HEADER]: "1" });
     const body =
       icon.contentEncoding === "base64" ? Uint8Array.from(Buffer.from(icon.content, "base64")).buffer : icon.content;
     return new Response(body, {
@@ -173,8 +176,9 @@ export default async function plugin(bb: BbPluginApi) {
   ctx.bb.background.schedule("auto-settle", "*/5 * * * *", async () => {
     await policy.evaluatePolicies();
   });
-  ctx.bb.rpc.register(bbSidebarRpcContract, { ...handlers, ...createServerRateLimits(ctx, lifecycle) });
-  ctx.bb.cli.register(createServerCli(lifecycle, handlers));
+  const rateLimits = createServerRateLimits(ctx, lifecycle);
+  ctx.bb.rpc.register(bbSidebarRpcContract, { ...handlers, ...rateLimits });
+  ctx.bb.cli.register(createServerCli(lifecycle, handlers, rateLimits.getThreadLimits));
   // New or resumed child work reopens the ancestor path, keeping its existing
   // sidebar nesting reachable. Siblings retain their own settled state.
   ctx.bb.events.on("thread.created", async ({ thread }) => {
@@ -186,10 +190,17 @@ export default async function plugin(bb: BbPluginApi) {
     await wakeAncestors(thread);
   });
 
+  // Archived threads miss a tree Settle. One that comes back inside a settled
+  // tree is filed with it rather than waking the tree.
+  ctx.bb.events.on("thread.unarchived", async ({ thread }) => {
+    await settleUnarchivedTree(thread.id);
+  });
+
   // A deleted thread must not leave a row behind that would park a future
   // thread reusing the id, and stale rows accumulate otherwise.
   ctx.bb.events.on("thread.deleted", ({ thread }) => {
     clear(thread.id);
+    threadPullRequests.forgetThread(thread.id);
     const removed = ctx.db.prepare(`DELETE FROM inbox_order WHERE thread_id = ?`).run(thread.id);
     if (removed.changes > 0) {
       ctx.bb.realtime.publish(INBOX_ORDER_CHANNEL, {});

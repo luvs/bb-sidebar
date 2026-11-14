@@ -1,6 +1,6 @@
 {
   "name": "bb-plugin-bb-sidebar",
-  "version": "0.3.7",
+  "version": "0.3.11",
   "type": "module",
   "description": "A bb thread sidebar with manual and automatic sorting, snooze, and settle actions.",
   "license": "MIT",
@@ -14,8 +14,8 @@
     "url": "https://github.com/yusuf8834/bb-sidebar/issues"
   },
   "engines": {
-    "bb": ">=0.47.0",
-    "bbPluginSdk": ">=0.6.75"
+    "bb": ">=0.49.0",
+    "bbPluginSdk": ">=0.6.132"
   },
   "bb": {
     "name": "BB Sidebar",
@@ -43,8 +43,9 @@
   "scripts": {
     "build": "bb plugin build",
     "fixture:db": "node scripts/make-fixture-db.mjs",
-    "check": "npm run lint && npm run format:check && npm run knip && npm run typecheck && npm test && npm run build && node scripts/check-app-bundle.mjs",
+    "check": "npm run lint && npm run format:check && npm run knip && npm run typecheck && npm test && npm run test:scripts && npm run build && node scripts/check-app-bundle.mjs",
     "test": "vitest run --config vitest.config.ts",
+    "test:scripts": "node --test scripts/bb-compat/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "biome lint . && node scripts/check-import-boundaries.mjs && node scripts/check-file-sizes.mjs",
     "format": "biome format --write .",
@@ -60,6 +61,7 @@
   "dependencies": {
     "@hugeicons/core-free-icons": "^4.1.3",
     "@hugeicons/react": "^1.1.6",
+    "cron-parser": "^5.10.0",
     "react-day-picker": "^9.14.0",
     "zod": "^4.3.6"
   },
@@ -79,7 +81,6 @@
     "bb-app": "0.49.0",
     "better-sqlite3": "12.10.0",
     "clsx": "^2.1.1",
-    "cron-parser": "^5.10.0",
     "hono": "^4.13.3",
     "jsdom": "^29.0.1",
     "knip": "^5.88.1",

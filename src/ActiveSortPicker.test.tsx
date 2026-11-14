@@ -10,12 +10,15 @@ afterEach(cleanup);
 function Picker() {
   const [mode, setMode] = useState<ActiveSortMode>("manual");
   const [groupEnvironments, setGroupEnvironments] = useState(false);
+  const [groupSingleThreadProjects, setGroupSingleThreadProjects] = useState(true);
   return (
     <ActiveSortPicker
       mode={mode}
       onModeChange={setMode}
       groupEnvironments={groupEnvironments}
       onGroupEnvironmentsChange={setGroupEnvironments}
+      groupSingleThreadProjects={groupSingleThreadProjects}
+      onGroupSingleThreadProjectsChange={setGroupSingleThreadProjects}
     />
   );
 }
@@ -25,12 +28,15 @@ function openPicker() {
   fireEvent.keyDown(screen.getByRole("button", { name: "Sort active threads: Manual order" }), { key: "Enter" });
 }
 
-it.each(["Manual order", "Recent activity", "Date created"])("closes after a pointer click on %s", (name) => {
-  openPicker();
-  fireEvent.click(screen.getByRole("radio", { name }), { detail: 1 });
-  expect(screen.queryByRole("dialog", { name: "Sort active threads" })).toBeNull();
-  expect(screen.getByRole("button", { name: `Sort active threads: ${name}` })).toBeDefined();
-});
+it.each(["Manual order", "Recent activity", "Waiting longest", "Date created"])(
+  "closes after a pointer click on %s",
+  (name) => {
+    openPicker();
+    fireEvent.click(screen.getByRole("radio", { name }), { detail: 1 });
+    expect(screen.queryByRole("dialog", { name: "Sort active threads" })).toBeNull();
+    expect(screen.getByRole("button", { name: `Sort active threads: ${name}` })).toBeDefined();
+  },
+);
 
 it("selects without dismissing on a keyboard-generated click", () => {
   openPicker();
@@ -55,4 +61,8 @@ it("keeps Project open for environment grouping after pointer and Enter activati
   const toggle = screen.getByRole("checkbox", { name: "Group by worktree" });
   fireEvent.click(toggle);
   expect((toggle as HTMLInputElement).checked).toBe(true);
+  const singles = screen.getByRole("checkbox", { name: "Group single-thread projects" });
+  expect((singles as HTMLInputElement).checked).toBe(true);
+  fireEvent.click(singles);
+  expect((singles as HTMLInputElement).checked).toBe(false);
 });

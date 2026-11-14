@@ -14,6 +14,7 @@ import {
   visibleShelfThreads,
   activeRepresentativeThreadId,
 } from "./inbox-layout";
+import { layoutActiveGroups, projectGroupView } from "./environment-groups";
 
 function thread(overrides: Partial<PluginSidebarThread> = {}): PluginSidebarThread {
   return {
@@ -79,6 +80,15 @@ describe("layoutActiveThreadsByProject", () => {
     const a = thread({ id: "a" });
     expect(layoutActiveThreadsByProject([a])).toEqual([{ kind: "thread", key: "a", thread: a }]);
     expect(layoutActiveThreadsByProject([])).toEqual([]);
+  });
+  it("groups singleton projects when asked", () => {
+    const a = thread({ id: "a", projectId: "p" });
+    const b = thread({ id: "b", projectId: "q" });
+    const c = thread({ id: "c", projectId: "p" });
+    expect(layoutActiveThreadsByProject([a, b, c], [], true)).toEqual([
+      { kind: "group", key: "project:p", projectId: "p", threads: [a, c] },
+      { kind: "group", key: "project:q", projectId: "q", threads: [b] },
+    ]);
   });
   it("places projects by the saved order, whichever of their threads leads", () => {
     const a = thread({ id: "a", projectId: "p" });
@@ -234,5 +244,37 @@ describe("projectUnitKey", () => {
     expect(projectUnitKey("q")).toBe("project:q");
     expect(projectUnitKey("p")).not.toBe(projectUnitKey("q"));
     expect(projectUnitKey("p")).not.toBe("p");
+  });
+});
+
+describe("projectGroupView alerts", () => {
+  const threads = [
+    thread({ id: "done", projectId: "p", indicator: "unread-success" }),
+    thread({ id: "asks", projectId: "p", hasPendingInteraction: true }),
+    thread({ id: "failed", projectId: "p", indicator: "unread-error" }),
+    thread({ id: "also-failed", projectId: "p", queuedWork: "failed" }),
+    thread({ id: "working", projectId: "p", indicator: "runtime" }),
+    thread({ id: "idle", projectId: "p" }),
+  ];
+  const view = (collapsed: string[], activeThreadId: string | null = null) =>
+    projectGroupView(layoutActiveGroups(threads, false), new Set(collapsed), new Set(), activeThreadId, new Set());
+
+  it("counts the news a collapsed group hides, most urgent first, leaving out work", () => {
+    expect(view(["p"])[0]).toMatchObject({
+      alerts: [
+        { kind: "failed", count: 2 },
+        { kind: "needs-you", count: 1 },
+        { kind: "done", count: 1 },
+      ],
+    });
+  });
+  it("leaves out rows still shown under the header, and every row of an open group", () => {
+    expect(view(["p"], "asks")[0]).toMatchObject({
+      alerts: [
+        { kind: "failed", count: 2 },
+        { kind: "done", count: 1 },
+      ],
+    });
+    expect(view([])[0]).toMatchObject({ alerts: [] });
   });
 });
