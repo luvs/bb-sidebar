@@ -14,7 +14,7 @@ import { isInactiveThread } from "./inactive";
 import { isWorkingTree } from "./working-tree";
 import { threadNeedsAttention } from "./useRenamingShelfLocks";
 import { threadsWithAskingDescendants } from "./child-status";
-import { attentionCounts, threadMatchesStates, type AttentionState } from "./thread-filter";
+import { attentionCounts, threadIsUnread, threadMatchesStates, type AttentionState } from "./thread-filter";
 import { useWorkingForDisplay } from "./StatusSlot";
 
 interface InboxShelfThreadsOptions {
@@ -92,13 +92,16 @@ export function useInboxShelfThreads({
       // Work running anywhere under the thread counts, and so does anything
       // waiting on the user — its own question or failure, or a descendant's,
       // which `isWorkingTree` deliberately refuses because that rule also
-      // decides the compact row. A thread that just woke from a snooze is
-      // news for Active, unless it is one of the ones waiting on the user.
+      // decides the compact row. A reply the user has not read keeps the
+      // thread there too, however long ago it came, so finished work stays
+      // where it ran until it is read. A thread that just woke from a snooze
+      // is news for Active, unless it is one of the ones waiting on the user.
       if (
         workingShelfEnabled &&
         (needsAttention ||
           (!lifecycle.wokeFor(thread) &&
-            isWorkingTree(thread, childrenByParentId.get(thread.id) ?? [], childrenByParentId, isWorking)))
+            (threadIsUnread(thread) ||
+              isWorkingTree(thread, childrenByParentId.get(thread.id) ?? [], childrenByParentId, isWorking))))
       ) {
         working.push(thread);
       } else if (!askingParentIds.has(thread.id) && isInactiveThread(thread, now, inactiveAfterHours)) {
@@ -115,9 +118,10 @@ export function useInboxShelfThreads({
       inboxBase: sortByCreatedAtDescending(activeUnpinned),
       workingBase: sortByCreatedAtDescending(working),
       // Active's "nothing needs you" line must not appear over a shelf that
-      // holds a question.
+      // holds a question or a reply the user has not read.
       workingNeedsYou: working.some(
-        (candidate) => threadNeedsAttention(candidate) || askingParentIds.has(candidate.id),
+        (candidate) =>
+          threadNeedsAttention(candidate) || askingParentIds.has(candidate.id) || threadIsUnread(candidate),
       ),
       inactiveBase: sortByCreatedAtDescending(inactive),
       // Keep a global order behind project-scoped and parked views. Child and

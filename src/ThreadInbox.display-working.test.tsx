@@ -13,6 +13,7 @@ import {
   thread,
   toastMocks,
 } from "./test-inbox";
+import { WORKING_EMPTY_LINES } from "./working-empty-lines";
 
 vi.mock("sonner", async () => (await import("./test-inbox")).sonnerMock());
 
@@ -279,5 +280,65 @@ describe("the shelf above Active", () => {
     await screen.findByRole("link", { name: "Needs an answer" });
     expect(titlesIn("Working")).toEqual(["Needs an answer"]);
     expect(screen.queryByText(/Nothing needs you|Nobody needs you|Zero asks/)).toBeNull();
+  });
+
+  describe("a finished thread you have not read", () => {
+    const unread = { indicator: "unread-success", isUnread: true } as const;
+
+    it("stays on the Working shelf, with its full card, until it is read", async () => {
+      renderInbox(
+        [thread({ id: "unread", title: "Fresh result", ...unread }), thread({ id: "read", title: "Read result" })],
+        { settings: { workingShelf: true } },
+      );
+      await screen.findByRole("link", { name: "Read result" });
+      await waitFor(() => expect(titlesIn("Working")).toEqual(["Fresh result"]));
+      expect(titlesIn("Active")).toEqual(["Read result"]);
+      // The row collapses to one line only while it is working.
+      expect(isCompact("Fresh result")).toBe(false);
+    });
+
+    it("stays on the shelf however long ago it finished", async () => {
+      // The factory's timestamps are decades old, so a read thread is Inactive.
+      renderInbox(
+        [thread({ id: "unread", title: "Old result", ...unread }), thread({ id: "read", title: "Old read result" })],
+        { settings: { workingShelf: true, inactiveThreadsEnabled: true } },
+      );
+      await screen.findByRole("link", { name: "Old result" });
+      await waitFor(() => expect(titlesIn("Working")).toEqual(["Old result"]));
+      // Inactive starts collapsed: its header counts the read thread.
+      expect(within(screen.getByRole("region", { name: "Inactive" })).getByText("Inactive (1)")).toBeDefined();
+    });
+
+    it("goes to Active when it has just woken from a snooze", async () => {
+      renderInbox(
+        [
+          thread({ id: "woke", title: "Woke result", ...unread }),
+          thread({ id: "busy", title: "Busy work", indicator: "runtime" }),
+        ],
+        {
+          settings: { workingShelf: true },
+          rows: [{ threadId: "woke", settledAt: null, snoozedUntil: Date.now() - 60_000, snoozedAt: 100 }],
+        },
+      );
+      await screen.findByRole("link", { name: "Woke result" });
+      await waitFor(() => expect(titlesIn("Working")).toEqual(["Busy work"]));
+      expect(titlesIn("Active")).toEqual(["Woke result"]);
+    });
+
+    it("stays in Active while the shelf is off", async () => {
+      renderInbox([thread({ id: "unread", title: "Fresh result", ...unread })]);
+      await screen.findByRole("link", { name: "Fresh result" });
+      expect(screen.queryByRole("region", { name: "Working" })).toBeNull();
+      expect(titlesIn("Active")).toEqual(["Fresh result"]);
+    });
+
+    it("keeps Active from saying every thread is working", async () => {
+      renderInbox([thread({ id: "unread", title: "Fresh result", ...unread })], {
+        settings: { workingShelf: true },
+      });
+      await screen.findByRole("link", { name: "Fresh result" });
+      expect(titlesIn("Working")).toEqual(["Fresh result"]);
+      for (const line of WORKING_EMPTY_LINES) expect(screen.queryByText(line)).toBeNull();
+    });
   });
 });

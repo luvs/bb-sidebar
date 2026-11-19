@@ -83,7 +83,7 @@ export function SidebarLayoutSettings({
       <SettingRow
         title="Working shelf"
         experimental
-        description="Keep working threads, and anything waiting on you, in a shelf above Active. A thread leaves for Active once its work has finished and nothing needs you. Pinned threads stay pinned."
+        description="Keep working threads, anything waiting on you, and replies you have not read in a shelf above Active. A thread leaves for Active once its work has finished, you have read it, and nothing needs you. Pinned threads stay pinned."
         control={
           <Switch
             label="Working shelf"

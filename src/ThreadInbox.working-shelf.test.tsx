@@ -381,7 +381,8 @@ describe("parking threads", () => {
             thread({ id: "child", parentThreadId: "waiting", title: "Child work", indicator: "runtime" }),
             thread({ id: "asking", title: "Asking parent", hasPendingInteraction: true }),
             thread({ id: "asking-child", parentThreadId: "asking", title: "Asking child", indicator: "runtime" }),
-            thread({ id: "done", title: "Done work", indicator: "unread-success", isUnread: true }),
+            thread({ id: "done", title: "Done work" }),
+            thread({ id: "unread", title: "Unread work", indicator: "unread-success", isUnread: true }),
             thread({ id: "pinned", title: "Pinned busy", indicator: "runtime", isPinned: true }),
           ],
           projects: [{ id: "proj_1", name: "bb", isPersonal: false, href: "", settingsHref: "" }],
@@ -405,11 +406,11 @@ describe("parking threads", () => {
         return;
       }
       await waitFor(() =>
-        expect(titlesIn("Working").sort()).toEqual(["Asking parent", "Busy work", "Waiting on child"]),
+        expect(titlesIn("Working").sort()).toEqual(["Asking parent", "Busy work", "Unread work", "Waiting on child"]),
       );
-      // Finished work you have not read is Active's business; the shelf above
-      // it keeps what is running and what is waiting on you. Pinned stays
-      // pinned.
+      // Finished work you have read is Active's business; the shelf above it
+      // keeps what is running, what is waiting on you, and what you have not
+      // read yet. Pinned stays pinned.
       expect(titlesIn("Active")).toEqual(["Done work"]);
       expect(titlesIn("Pinned")).toEqual(["Pinned busy"]);
       // One line like the other shelves, even with compact mode off.

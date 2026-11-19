@@ -41,7 +41,7 @@ interface ShelfThreads {
 
 interface ThreadInboxViewProps {
   shelves: Record<"pinned" | "inbox" | "working" | "inactive" | "snoozed" | "parked" | "settled", ShelfThreads>;
-  /** Whether the Working shelf holds a thread waiting on the user. */
+  /** Whether the Working shelf holds a thread waiting on the user, or a reply they have not read. */
   workingNeedsYou: boolean;
   scope: readonly string[];
   filterBar: ThreadFilterControls & {

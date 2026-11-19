@@ -32,7 +32,12 @@ export function threadAttentionState(thread: PluginSidebarThread): AttentionStat
   ) {
     return "running";
   }
-  return thread.isUnread || thread.indicator === "unread-success" ? "unread" : null;
+  return threadIsUnread(thread) ? "unread" : null;
+}
+
+/** Whether the thread has a reply the user has not read, whatever else it is doing. */
+export function threadIsUnread(thread: PluginSidebarThread): boolean {
+  return thread.isUnread || thread.indicator === "unread-success";
 }
 
 export function attentionCounts(threads: readonly PluginSidebarThread[]): AttentionCounts {
