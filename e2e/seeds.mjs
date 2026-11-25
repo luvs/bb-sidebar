@@ -24,6 +24,12 @@ export async function seed(title, { projectId = fixture.projectId, root } = {}) 
   const id = result.id ?? result.thread?.id;
   expect(id).toBeTruthy();
   try {
+    // Stop only once the empty turn has started; see "Seeding" in e2e/README.md.
+    await expect
+      .poll(async () => (await cli(["thread", "log", id])).some((event) => event.type === "turn/started"), {
+        timeout: 20_000,
+      })
+      .toBe(true);
     await cli(["thread", "stop", id]);
     await cli(["thread", "wait", id, "--status", "idle", "--timeout", "30s"]);
     const { thread } = await cli(["thread", "get", id]);

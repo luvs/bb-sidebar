@@ -71,11 +71,11 @@ checked. Raw environments are never logged. Evidence is retained in
 
 Codex's model requests go to a loopback stand-in, not OpenAI: the scratch
 `config.toml` sets `openai_base_url` to `scripts/e2e/provider-endpoint.mjs`,
-which accepts every request and answers none. A fixture turn that starts before
-its stop therefore waits until the stop interrupts it. Against api.openai.com
-the unauthenticated turn got 401 at once and retried, logging a provider error
-per retry, so seeding failed whenever the turn won that race (often on GitHub's
-Ubuntu runners, rarely on macOS). The requests it received are saved in
+which accepts every request and answers none, so a fixture turn waits until
+its stop interrupts it. Against api.openai.com the unauthenticated turn got 401
+at once and retried, logging a provider error per retry, so seeding failed
+whenever the turn started before its stop landed (often on GitHub's Ubuntu
+runners, rarely on macOS). The requests it received are saved in
 `e2e-artifacts/provider-requests.log`.
 
 Known limitation: this guard enforces credential/file isolation, not zero
@@ -88,12 +88,14 @@ credential guard. The scratch homes contain no developer credentials or copied
 provider state.
 
 The suite seeds four fixed-title threads using CLI `thread spawn --prompt ''`
-with Codex and the scratch checkout, immediately followed by `thread stop`.
-Each must reach `idle`, have an environment, have no queued messages, and have
-no item/output/tool events or provider errors. Metadata warnings and account
-announcements are allowed. An empty initial turn can start before stop arrives;
-this is a create-and-cancel fixture, not a guarantee that no turn ever starts.
-It supplies idle rows without completed agent output. The quick smoke keeps
+with Codex and the scratch checkout. Seeding waits for the empty turn's
+`turn/started` event and only then runs `thread stop`: a stop that lands while
+bb is still provisioning the thread can cancel provisioning and still let the
+turn start, with nothing left to stop it (bb-app 0.50.1). The loopback provider
+never answers, so the started turn waits for the stop. Each thread must reach
+`idle`, have an environment, have no queued messages, and have no
+item/output/tool events or provider errors. Metadata warnings and account
+announcements are allowed. It supplies idle rows without completed agent output. The quick smoke keeps
 the original seven-day scheduled fixture.
 
 The launcher checks `codex --version` before starting the scratch server. CI

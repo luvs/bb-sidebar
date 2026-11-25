@@ -320,11 +320,21 @@ trace_exporter = "none"
       const id = data.id ?? data.thread?.id;
       if (!id) throw new Error("Scratch thread returned no id");
       if (idle) {
+        // A stop that lands while bb is still provisioning can cancel provisioning
+        // and still let the empty turn start, with nothing left to stop it. Stop
+        // only once the turn has started: the loopback provider never answers, so
+        // the turn waits for this stop. See "Seeding" in e2e/README.md.
+        const deadline = Date.now() + 20_000;
+        const log = async () => JSON.parse((await cli(["thread", "log", id, "--json"])).stdout);
+        while (!(await log()).some((event) => event.type === "turn/started")) {
+          if (Date.now() > deadline) throw new Error(`Fixture ${id} never started its empty turn`);
+          await delay(200);
+        }
         await cli(["thread", "stop", id, "--json"]);
         await cli(["thread", "wait", id, "--status", "idle", "--timeout", "30s", "--json"]);
         const { thread } = JSON.parse((await cli(["thread", "get", id, "--json"])).stdout);
         if (!thread.environmentId || thread.queuedMessageCount) throw new Error("Idle fixture is not initialized");
-        const events = JSON.parse((await cli(["thread", "log", id, "--json"])).stdout);
+        const events = await log();
         const unexpected = events.filter((event) => {
           if (event.type.startsWith("item/")) return true;
           if (!event.type.startsWith("provider/")) return false;
