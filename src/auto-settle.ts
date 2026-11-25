@@ -1,0 +1,156 @@
+import { canPark, hasLiveWork, isTurnInFlight, rowActivity, type ThreadRowActivity } from "./lifecycle";
+
+export const MIN_AUTO_SETTLE_AFTER_DAYS = 1;
+export const MAX_AUTO_SETTLE_AFTER_DAYS = 90;
+const DAY_MS = 24 * 60 * 60 * 1_000;
+
+export type SettledOverride = "active" | "settled";
+
+export interface AutoSettleLifecycleState {
+  parkedAt?: number | null;
+  settledAt: number | null;
+  settledOverride: SettledOverride | null;
+  snoozedUntil: number | null;
+}
+
+/** The fields of a bb project-thread row that the policy reads. */
+export interface AutoSettleThread {
+  activity: ThreadRowActivity;
+  createdAt: number;
+  hasPendingInteraction: boolean;
+  latestAttentionAt: number;
+  pinnedAt: number | null;
+  queuedWork: "failed" | "none" | "waiting";
+  status: "active" | "error" | "idle" | "pending" | "starting" | "stopping";
+  updatedAt: number;
+}
+
+export type AutoSettlePullRequest =
+  | { outcome: "absent" }
+  | { outcome: "unknown" }
+  | {
+      outcome: "available";
+      state: "closed" | "draft" | "merged" | "open";
+      updatedAt: string;
+    };
+
+interface AutoSettleSettings {
+  afterDays: number | null;
+  onMerge: boolean;
+}
+
+type AutoSettleDecision = "keep" | "settle" | "unsettle";
+
+/** The same live work that blocks a manual settle in the sidebar. */
+function isWorking(thread: AutoSettleThread): boolean {
+  return hasLiveWork(rowActivity(thread.activity), isTurnInFlight(thread.status));
+}
+
+// Settling also stops the thread's runtime, so anything the sidebar would
+// refuse to park must keep it out of policy reach too.
+function cannotAutoSettle(lifecycle: AutoSettleLifecycleState | null, thread: AutoSettleThread): boolean {
+  return (
+    thread.pinnedAt !== null ||
+    !canPark({
+      hasPendingInteraction: thread.hasPendingInteraction,
+      hasQueuedWork: thread.queuedWork !== "none",
+      isWorking: isWorking(thread),
+    }) ||
+    lifecycle?.parkedAt != null ||
+    lifecycle?.snoozedUntil != null
+  );
+}
+
+/** Whether deciding this thread's policy state requires a PR lookup. */
+export function autoSettleNeedsPullRequest(
+  lifecycle: AutoSettleLifecycleState | null,
+  thread: AutoSettleThread,
+): boolean {
+  return lifecycle?.settledOverride == null && !cannotAutoSettle(lifecycle, thread);
+}
+
+/** Settled by the policy itself, not by the user. */
+export function isAutoSettled(lifecycle: AutoSettleLifecycleState | null): boolean {
+  return lifecycle?.settledAt != null && lifecycle.settledOverride == null;
+}
+
+/**
+ * An ordinary pass leaves a thread the policy settled alone. Only the checks
+ * that need no PR lookup can return it to Active: anything that would keep a
+ * live thread out of policy reach, such as a pin or running work.
+ */
+export function decideAutoSettledThread(
+  lifecycle: AutoSettleLifecycleState | null,
+  thread: AutoSettleThread,
+): AutoSettleDecision {
+  return cannotAutoSettle(lifecycle, thread) ? "unsettle" : "keep";
+}
+
+/** Invalid settings disable inactivity settling instead of hiding work. */
+export function parseAutoSettleAfterDays(enabled: boolean, rawDays: string): number | null {
+  if (!enabled) return null;
+  const days = Number(rawDays);
+  return Number.isInteger(days) && days >= MIN_AUTO_SETTLE_AFTER_DAYS && days <= MAX_AUTO_SETTLE_AFTER_DAYS
+    ? days
+    : null;
+}
+
+/**
+ * Resolve one automatic transition. Explicit user overrides are immutable
+ * here; real thread activity clears them through the lifecycle event handler.
+ */
+export function decideAutoSettle({
+  lifecycle,
+  now,
+  pullRequest,
+  settings,
+  thread,
+}: {
+  lifecycle: AutoSettleLifecycleState | null;
+  now: number;
+  pullRequest: AutoSettlePullRequest;
+  settings: AutoSettleSettings;
+  thread: AutoSettleThread;
+}): AutoSettleDecision {
+  if (lifecycle?.settledOverride != null) return "keep";
+
+  const isAutomaticallySettled = lifecycle?.settledAt != null;
+  if (cannotAutoSettle(lifecycle, thread)) {
+    return isAutomaticallySettled ? "unsettle" : "keep";
+  }
+
+  // A failed lookup is not evidence that no open PR exists. Keep the current
+  // state until the next evaluation can make a safe decision.
+  if (pullRequest.outcome === "unknown") return "keep";
+
+  const activityAt = Math.max(thread.createdAt, thread.updatedAt, thread.latestAttentionAt);
+  let shouldSettle = false;
+
+  if (pullRequest.outcome === "available") {
+    // Merged and closed both count as finished, and only when the user opted in.
+    const terminal = settings.onMerge && (pullRequest.state === "merged" || pullRequest.state === "closed");
+    if (terminal) {
+      const pullRequestUpdatedAt = Date.parse(pullRequest.updatedAt);
+      // A malformed terminal timestamp is not evidence that the PR finished
+      // after the thread's last activity. Keep the current state until a
+      // trustworthy response arrives rather than hiding active work.
+      if (Number.isNaN(pullRequestUpdatedAt)) return "keep";
+      shouldSettle = pullRequestUpdatedAt >= activityAt;
+    }
+
+    // Draft PRs are open work too. Neither state may fall through to the
+    // inactivity rule.
+    if (pullRequest.state === "open" || pullRequest.state === "draft") {
+      shouldSettle = false;
+    }
+  }
+
+  if (!shouldSettle && settings.afterDays !== null) {
+    const hasOpenPullRequest =
+      pullRequest.outcome === "available" && (pullRequest.state === "open" || pullRequest.state === "draft");
+    shouldSettle = !hasOpenPullRequest && activityAt < now - settings.afterDays * DAY_MS;
+  }
+
+  if (shouldSettle === isAutomaticallySettled) return "keep";
+  return shouldSettle ? "settle" : "unsettle";
+}

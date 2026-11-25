@@ -1,0 +1,105 @@
+import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
+import {
+  Archive03Icon,
+  ArrowDown01Icon,
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
+  ArrowTurnBackwardIcon,
+  ArrowUp01Icon,
+  ArrowUpDownIcon,
+  BrushCleaningIcon,
+  Calendar03Icon,
+  CancelCircleIcon,
+  Car05Icon,
+  CheckListIcon,
+  Clock01Icon,
+  Delete02Icon,
+  ComputerIcon,
+  ComputerTerminal01Icon,
+  Mail01Icon,
+  MailOpen01Icon,
+  Edit02Icon,
+  FolderGitIcon,
+  GitBranchIcon,
+  GitPullRequestIcon,
+  HelpCircleIcon,
+  Loading03Icon,
+  PauseCircleIcon,
+  PinIcon,
+  PinOffIcon,
+  PlugSocketIcon,
+  Pulse01Icon,
+  PulseRectangle01Icon,
+  Search01Icon,
+  StopCircleIcon,
+  Tick02Icon,
+  TranslateIcon,
+  UserAdd01Icon,
+  WorkflowCircle03Icon,
+  Yoga02Icon,
+} from "@hugeicons/core-free-icons";
+import { cn } from "../lib/utils";
+
+const ICON_MAP = {
+  Archive: Archive03Icon,
+  ArrowTurnBackward: ArrowTurnBackwardIcon,
+  ArrowUpDown: ArrowUpDownIcon,
+  Clean: BrushCleaningIcon,
+  Calendar: Calendar03Icon,
+  Car: Car05Icon,
+  Check: Tick02Icon,
+  ChevronDown: ArrowDown01Icon,
+  ChevronLeft: ArrowLeft01Icon,
+  ChevronRight: ArrowRight01Icon,
+  ChevronUp: ArrowUp01Icon,
+  CircleQuestion: HelpCircleIcon,
+  CircleX: CancelCircleIcon,
+  Clock: Clock01Icon,
+  Computer: ComputerIcon,
+  Delete: Delete02Icon,
+  Edit: Edit02Icon,
+  FolderGit: FolderGitIcon,
+  GitBranch: GitBranchIcon,
+  GitPullRequest: GitPullRequestIcon,
+  ListTodo: CheckListIcon,
+  Loading: Loading03Icon,
+  Mail: Mail01Icon,
+  MailOpen: MailOpen01Icon,
+  Meditation: Yoga02Icon,
+  PauseCircle: PauseCircleIcon,
+  Pin: PinIcon,
+  PinOff: PinOffIcon,
+  Plug: PlugSocketIcon,
+  Pulse: Pulse01Icon,
+  Working: PulseRectangle01Icon,
+  Search: Search01Icon,
+  StopCircle: StopCircleIcon,
+  Terminal: ComputerTerminal01Icon,
+  Translate: TranslateIcon,
+  UserRoundPlus: UserAdd01Icon,
+  Workflow: WorkflowCircle03Icon,
+} as const satisfies Record<string, IconSvgElement>;
+
+export type IconName = keyof typeof ICON_MAP;
+
+export function Icon({
+  name,
+  className,
+  "aria-hidden": ariaHidden,
+  "aria-label": ariaLabel,
+}: {
+  name: IconName;
+  className?: string;
+  "aria-hidden"?: boolean | "true" | "false";
+  "aria-label"?: string;
+}) {
+  return (
+    <HugeiconsIcon
+      icon={ICON_MAP[name]}
+      className={cn(className)}
+      aria-hidden={ariaHidden}
+      aria-label={ariaLabel}
+      data-icon={name}
+    />
+  );
+}
