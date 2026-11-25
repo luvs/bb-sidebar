@@ -1,4 +1,0 @@
-/* Relative update and wake labels vary with wall time; keep their geometry. */
-[data-bb-sidebar-root] .tabular-nums {
-  visibility: hidden !important;
-}
