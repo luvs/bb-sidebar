@@ -33,12 +33,12 @@ jobs:
       needed: ${{ steps.plan.outputs.needed }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -72,7 +72,7 @@ jobs:
 
       - name: Save the prepared files, results and logs
         if: ${{ !cancelled() && steps.plan.outputs.needed == 'true' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bb-bump
           path: ${{ runner.temp }}/bump/
@@ -91,15 +91,15 @@ jobs:
       pull-requests: write
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
 
       - name: Download the prepared files
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: bb-bump
           path: ${{ runner.temp }}/bump
