@@ -116,10 +116,10 @@ test("missing or invalid channel results count as failures", () => {
   assert.equal(results[2].bbApp, undefined);
 });
 
-// Git hooks export these (a pre-push from a worktree sets GIT_DIR), and they
-// would point the fixture's git at this repository instead of the temp one.
-const GIT_REPO_VARS = ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY"];
-const fixtureGitEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !GIT_REPO_VARS.includes(key)));
+// Git hooks export GIT_* variables (a pre-push from a worktree sets GIT_DIR),
+// and they would point the fixture's git at this repository instead of the
+// temp one. Run fixture git with none of them.
+const fixtureGitEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
 const git = (cwd, ...args) => execFileSync("git", args, { cwd, env: fixtureGitEnv, encoding: "utf8" }).trim();
 
 /** A clone of a local bare repo holding the real package.json and lockfile. */
