@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { createIsolationGuard } from "./isolation.mjs";
 import { createScratchKeychain } from "./keychain.mjs";
+import { startProviderEndpoint } from "./provider-endpoint.mjs";
 
 export async function startScratchServer() {
   const args = process.argv.slice(2);
@@ -45,6 +46,7 @@ export async function startScratchServer() {
   let stopMonitoring = false;
   let isolationFailure;
   let marketplace;
+  let providerEndpoint;
   const freePort = () =>
     new Promise((accept, reject) => {
       const server = createServer();
@@ -110,6 +112,10 @@ export async function startScratchServer() {
       for (const child of children) signal(child, "SIGKILL");
       marketplace?.closeAllConnections();
       if (marketplace) await new Promise((accept) => marketplace.close(accept));
+      if (providerEndpoint) {
+        writeFileSync(resolve("e2e-artifacts/provider-requests.log"), providerEndpoint.requests.join("\n"));
+        await providerEndpoint.close();
+      }
       rmSync(scratch, { recursive: true, force: true });
       console.log("CLEANUP: process groups stopped; scratch data removed (including scratch TMPDIR)");
       if (isolationFailure) throw isolationFailure;
@@ -163,7 +169,8 @@ export async function startScratchServer() {
       marketplace.listen(0, "127.0.0.1", accept);
     });
     const marketplacePort = marketplace.address().port;
-    if (marketplacePort === 38886) throw new Error("Refusing the developer's port");
+    providerEndpoint = await startProviderEndpoint();
+    if (marketplacePort === 38886 || providerEndpoint.port === 38886) throw new Error("Refusing the developer's port");
     Object.assign(env, {
       BB_DATA_DIR: scratch,
       BB_SERVER_URL: url,
@@ -175,6 +182,7 @@ export async function startScratchServer() {
     writeFileSync(
       join(env.CODEX_HOME, "config.toml"),
       `
+openai_base_url = "${providerEndpoint.baseUrl}"
 check_for_update_on_startup = false
 cli_auth_credentials_store = "file"
 [analytics]

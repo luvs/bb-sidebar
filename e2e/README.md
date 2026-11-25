@@ -69,13 +69,23 @@ samples are marked `environmentVisible: false`, and their open files are still
 checked. Raw environments are never logged. Evidence is retained in
 `e2e-artifacts/isolation.jsonl` and uploaded on CI failures.
 
+Codex's model requests go to a loopback stand-in, not OpenAI: the scratch
+`config.toml` sets `openai_base_url` to `scripts/e2e/provider-endpoint.mjs`,
+which accepts every request and answers none. A fixture turn that starts before
+its stop therefore waits until the stop interrupts it. Against api.openai.com
+the unauthenticated turn got 401 at once and retried, logging a provider error
+per retry, so seeding failed whenever the turn won that race (often on GitHub's
+Ubuntu runners, rarely on macOS). The requests it received are saved in
+`e2e-artifacts/provider-requests.log`.
+
 Known limitation: this guard enforces credential/file isolation, not zero
-outbound traffic. During investigation an unauthenticated Codex child contacted
-`[2606:4700:4408::ac40:9bd1]:443`; its hostname was not established. Other native
-provider discovery helpers also contacted outside addresses. Documented model
-endpoint overrides did not eliminate all traffic. Established TCP destinations
-are recorded with `lsof`; outbound connections do not fail the credential guard.
-The scratch homes contain no developer credentials or copied provider state.
+outbound traffic. Before the stand-in, an unauthenticated Codex child contacted
+`[2606:4700:4408::ac40:9bd1]:443`, a Cloudflare address; CI logs later showed
+it reaching `wss://api.openai.com` through Cloudflare. Other
+native provider discovery helpers also contacted outside addresses. Established
+TCP destinations are recorded with `lsof`; outbound connections do not fail the
+credential guard. The scratch homes contain no developer credentials or copied
+provider state.
 
 The suite seeds four fixed-title threads using CLI `thread spawn --prompt ''`
 with Codex and the scratch checkout, immediately followed by `thread stop`.
